@@ -19,7 +19,7 @@
       <span class="legend-item"><span class="swatch na"></span> Not reservable</span>
     </div>
     <div class="auth-area" id="authArea">
-      <div id="googleSignInButton"></div>
+      <button type="button" id="googleSignInButton" class="btn-google-signin">Sign in with Google</button>
       <div class="signed-in-info" id="signedInInfo">
         <span id="signedInName"></span>
         <button type="button" id="signOutBtn" class="btn-link">Sign out</button>
@@ -85,7 +85,7 @@
   </div>
 
   <script src="config.js"></script>
-  <script src="https://accounts.google.com/gsi/client" async defer onload="window.__gisLoaded && window.__gisLoaded()"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <script src="rooms-data.js"></script>
   <script src="app.js"></script>
 </body>

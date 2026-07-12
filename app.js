@@ -1,75 +1,77 @@
-// Elgin Campus Room Reservations — app logic (vanilla JS, no build step, no CDN deps).
+// Elgin Campus Room Reservations — app logic (vanilla JS, no build step).
+// Data store: Supabase Postgres (see supabase/schema.sql). Auth: Supabase Auth
+// with Google as the OAuth provider (configured in the Supabase dashboard —
+// this file never talks to Google directly).
 (function () {
   "use strict";
 
-  var STORAGE_KEY = "atc-room-reservations";
-  var AUTH_STORAGE_KEY = "atc-current-user";
-  var REFRESH_INTERVAL_MS = 30000;
+  var REFRESH_INTERVAL_MS = 30000; // recompute "is it occupied right now" as time passes
+  var POLL_FALLBACK_MS = 45000; // only used if the Realtime channel fails to (re)connect
+
+  // The Supabase JS UMD bundle exposes a global named `supabase` — our own
+  // client instance is deliberately NOT named that to avoid shadowing it.
+  var db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   var currentFloor = 3;
   var currentModalRoom = null; // { floor, roomId }
   var editingReservationId = null; // non-null while the reserve form is in "edit" mode
+  var currentSession = null; // Supabase Auth session, or null when signed out
+
+  var reservationsCache = []; // in-memory mirror of the `reservations` table
+  var reservationsLoaded = false;
+  var pollFallbackTimer = null;
 
   // ---------------------------------------------------------------------
-  // Storage helpers
+  // Data layer (Supabase)
   // ---------------------------------------------------------------------
 
-  function loadReservations() {
-    try {
-      var raw = localStorage.getItem(STORAGE_KEY);
-      var parsed = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed) ? parsed : [];
-    } catch (e) {
-      return [];
+  // Maps a `reservations` row (snake_case, as Postgres returns it) to the
+  // camelCase shape the rest of this file already works with.
+  function mapRow(row) {
+    return {
+      id: row.id,
+      floor: row.floor,
+      roomId: row.room_id,
+      date: row.reservation_date,
+      startHour: row.start_hour,
+      durationHours: row.duration_hours,
+      email: row.email,
+      name: row.name,
+    };
+  }
+
+  async function refreshReservationsCache() {
+    var res = await db.from("reservations").select("*");
+    if (res.error) {
+      console.error("Failed to load reservations:", res.error);
+      return false;
     }
+    reservationsCache = (res.data || []).map(mapRow);
+    reservationsLoaded = true;
+    return true;
   }
 
-  function saveReservations(list) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-  }
-
-  function addReservation(reservation) {
-    var list = loadReservations();
-    list.push(reservation);
-    saveReservations(list);
-  }
-
-  function cancelReservationById(id) {
-    var list = loadReservations().filter(function (r) {
-      return r.id !== id;
-    });
-    saveReservations(list);
-  }
-
-  function updateReservationById(id, patch) {
-    var list = loadReservations();
-    for (var i = 0; i < list.length; i++) {
-      if (list[i].id === id) {
-        list[i] = Object.assign({}, list[i], patch);
-        break;
-      }
+  // Re-fetches the whole table, then re-renders whatever's currently on
+  // screen that depends on it (map occupancy, and the modal if it's open).
+  async function reloadAndRender() {
+    await refreshReservationsCache();
+    updateOccupancy(currentFloor);
+    if (currentModalRoom) {
+      renderDayGrid();
+      renderUpcomingList();
+      renderModalStatus();
     }
-    saveReservations(list);
-  }
-
-  function makeId() {
-    return (
-      "res_" +
-      Date.now().toString(36) +
-      "_" +
-      Math.random().toString(36).slice(2, 9)
-    );
   }
 
   function getReservationsFor(floor, roomId, date) {
-    return loadReservations().filter(function (r) {
+    return reservationsCache.filter(function (r) {
       return r.floor === floor && r.roomId === roomId && r.date === date;
     });
   }
 
   function hasConflict(floor, roomId, date, startHour, durationHours, excludeId) {
     var proposedEnd = startHour + durationHours;
-    return loadReservations().some(function (r) {
+    return reservationsCache.some(function (r) {
       if (excludeId && r.id === excludeId) return false;
       if (r.floor !== floor || r.roomId !== roomId || r.date !== date) return false;
       var existingEnd = r.startHour + r.durationHours;
@@ -81,11 +83,14 @@
   // different reservation (any floor/room) whose time range overlaps the
   // requested one on the same date? Returns the conflicting reservation, or
   // null. excludeId lets an in-progress edit ignore its own prior booking.
+  // This is a fast client-side pre-check only — the real backstop is the
+  // database's own EXCLUDE constraint (supabase/schema.sql), which is what
+  // actually prevents the race where two requests land at nearly the same
+  // time; see handleReserveSubmit's error handling for that path.
   function hasCrossRoomConflict(email, date, startHour, durationHours, excludeId) {
     var proposedEnd = startHour + durationHours;
-    var list = loadReservations();
-    for (var i = 0; i < list.length; i++) {
-      var r = list[i];
+    for (var i = 0; i < reservationsCache.length; i++) {
+      var r = reservationsCache[i];
       if (excludeId && r.id === excludeId) continue;
       if (r.email !== email || r.date !== date) continue;
       var existingEnd = r.startHour + r.durationHours;
@@ -96,100 +101,101 @@
     return null;
   }
 
+  // Postgres reports an EXCLUDE constraint violation as SQLSTATE 23P01.
+  // PostgREST (Supabase's REST layer) surfaces that as error.code === "23P01".
+  function isExclusionViolation(error) {
+    if (!error) return false;
+    if (error.code === "23P01") return true;
+    var text = ((error.message || "") + " " + (error.details || "")).toLowerCase();
+    return text.indexOf("exclusion") !== -1;
+  }
+
+  async function createReservation(payload) {
+    return db.from("reservations").insert(payload).select();
+  }
+
+  async function updateReservation(id, payload) {
+    return db.from("reservations").update(payload).eq("id", id).select();
+  }
+
+  async function deleteReservation(id) {
+    return db.from("reservations").delete().eq("id", id);
+  }
+
   // ---------------------------------------------------------------------
-  // Auth (Google Identity Services)
+  // Realtime (with a polling fallback if the channel can't connect)
   // ---------------------------------------------------------------------
 
-  function getCurrentUser() {
-    try {
-      var raw = sessionStorage.getItem(AUTH_STORAGE_KEY);
-      return raw ? JSON.parse(raw) : null;
-    } catch (e) {
-      return null;
-    }
+  function startPollFallback() {
+    if (pollFallbackTimer) return;
+    pollFallbackTimer = setInterval(reloadAndRender, POLL_FALLBACK_MS);
   }
 
-  function setCurrentUser(user) {
-    sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
-    refreshAuthUI();
+  function stopPollFallback() {
+    if (!pollFallbackTimer) return;
+    clearInterval(pollFallbackTimer);
+    pollFallbackTimer = null;
   }
 
-  function clearCurrentUser() {
-    sessionStorage.removeItem(AUTH_STORAGE_KEY);
-    refreshAuthUI();
-  }
-
-  // Decodes (but does NOT cryptographically verify) a Google Identity Services
-  // JWT payload. Real verification would require fetching Google's JWKS and
-  // checking the signature with Web Crypto — out of scope for this client-only
-  // POC. Acceptable for this POC's trust model; a real deployment needs a
-  // backend to verify the token before trusting its claims.
-  function decodeJwtPayload(token) {
-    try {
-      var parts = token.split(".");
-      if (parts.length < 2) return null;
-      var base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-      while (base64.length % 4) base64 += "=";
-      var json = decodeURIComponent(
-        atob(base64)
-          .split("")
-          .map(function (c) {
-            return "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2);
-          })
-          .join("")
-      );
-      return JSON.parse(json);
-    } catch (e) {
-      return null;
-    }
-  }
-
-  function handleCredentialResponse(response) {
-    var payload = decodeJwtPayload(response && response.credential);
-    if (!payload || !payload.email) return;
-    setCurrentUser({ email: payload.email, name: payload.name || payload.email });
-  }
-
-  function tryInitGoogleSignIn() {
-    if (!window.google || !google.accounts || !google.accounts.id) return false;
-    try {
-      google.accounts.id.initialize({
-        client_id: typeof GOOGLE_CLIENT_ID !== "undefined" ? GOOGLE_CLIENT_ID : "",
-        callback: handleCredentialResponse,
+  function setupRealtime() {
+    db.channel("reservations-changes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "reservations" },
+        function () {
+          reloadAndRender();
+        }
+      )
+      .subscribe(function (status) {
+        if (status === "SUBSCRIBED") {
+          stopPollFallback();
+        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+          // Realtime isn't connecting (e.g. blocked network path) — fall
+          // back to periodic refetching so the app still stays in sync.
+          startPollFallback();
+        }
       });
-      return true;
-    } catch (e) {
-      return false;
-    }
   }
 
-  function tryRenderGoogleButton() {
-    var container = document.getElementById("googleSignInButton");
-    if (!container) return;
-    container.innerHTML = "";
-    if (!window.google || !google.accounts || !google.accounts.id) return;
-    try {
-      google.accounts.id.renderButton(container, { theme: "outline", size: "medium" });
-    } catch (e) {
-      // GIS unavailable (no real Client ID / no network path to Google in this
-      // environment) — expected in dev/test; the rest of the page still works.
-    }
+  // ---------------------------------------------------------------------
+  // Auth (Supabase Auth, Google OAuth provider)
+  // ---------------------------------------------------------------------
+
+  // The signed-in identity's email is now genuinely verified server-side by
+  // Supabase (it issued/verified the session), unlike the old raw-GIS flow
+  // that decoded a JWT client-side without checking its signature.
+  function getCurrentUser() {
+    var user = currentSession && currentSession.user;
+    if (!user || !user.email) return null;
+    var meta = user.user_metadata || {};
+    var name = meta.full_name || meta.name || user.email;
+    return { email: user.email, name: name };
+  }
+
+  function signIn() {
+    db.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: window.location.href },
+    });
+  }
+
+  function signOut() {
+    db.auth.signOut();
   }
 
   function renderAuthArea() {
     var user = getCurrentUser();
-    var btnContainer = document.getElementById("googleSignInButton");
+    var btn = document.getElementById("googleSignInButton");
     var infoEl = document.getElementById("signedInInfo");
     var nameEl = document.getElementById("signedInName");
 
     if (user) {
-      if (btnContainer) btnContainer.style.display = "none";
+      if (btn) btn.style.display = "none";
       if (infoEl) infoEl.style.display = "flex";
       if (nameEl) nameEl.textContent = (user.name ? user.name + " " : "") + "(" + user.email + ")";
     } else {
       if (infoEl) infoEl.style.display = "none";
-      if (btnContainer) btnContainer.style.display = "";
-      tryRenderGoogleButton();
+      if (btn) btn.style.display = "";
     }
   }
 
@@ -203,35 +209,20 @@
     }
   }
 
-  // TEST-ONLY HOOK: lets automated tests (and manual debugging) sign in as a
-  // fake identity without going through real Google OAuth, since headless
-  // browsers can't complete Google's sign-in flow and no real Client ID is
-  // configured yet. Not wired to any visible UI control.
-  window.__setTestUser = function (email, name) {
-    setCurrentUser({ email: String(email), name: name ? String(name) : String(email) });
-  };
+  function setupAuth() {
+    db.auth.onAuthStateChange(function (_event, session) {
+      currentSession = session;
+      refreshAuthUI();
+    });
 
-  // Same test-only escape hatch, reachable via a query string for convenience
-  // in scripted/headless runs, e.g. ?testUser=a@example.com&testName=Alice
-  function applyTestUserFromQuery() {
-    try {
-      var params = new URLSearchParams(window.location.search);
-      var email = params.get("testUser");
-      if (email) {
-        window.__setTestUser(email, params.get("testName") || email);
-      }
-    } catch (e) {
-      // ignore
-    }
+    // Restores state on load — including right after the OAuth redirect
+    // back from Google completes and Supabase parses the session out of the
+    // URL.
+    db.auth.getSession().then(function (result) {
+      currentSession = (result.data && result.data.session) || null;
+      refreshAuthUI();
+    });
   }
-
-  // Invoked by the GIS <script onload> in index.html once the real Google
-  // script has finished loading (it's loaded async, so it may arrive after
-  // this file has already run its initial setup).
-  window.__gisLoaded = function () {
-    tryInitGoogleSignIn();
-    renderAuthArea();
-  };
 
   // ---------------------------------------------------------------------
   // Date / time helpers
@@ -291,7 +282,7 @@
     if (!data) return;
 
     var floorTitleEl = document.getElementById("floorTitle");
-    floorTitleEl.textContent = data.title;
+    floorTitleEl.textContent = data.title + (reservationsLoaded ? "" : " — loading reservations…");
 
     var canvas = document.getElementById("mapCanvas");
     canvas.innerHTML = "";
@@ -542,7 +533,7 @@
     var list = document.getElementById("upcomingList");
     list.innerHTML = "";
 
-    var upcoming = loadReservations()
+    var upcoming = reservationsCache
       .filter(function (r) {
         return r.floor === floor && r.roomId === roomId && r.date >= today;
       })
@@ -554,7 +545,7 @@
     if (upcoming.length === 0) {
       var empty = document.createElement("li");
       empty.className = "upcoming-empty";
-      empty.textContent = "No upcoming reservations.";
+      empty.textContent = reservationsLoaded ? "No upcoming reservations." : "Loading…";
       list.appendChild(empty);
       return;
     }
@@ -571,7 +562,9 @@
 
       // Other people's bookings stay visible (so everyone can see the room is
       // taken) but are read-only — only the reservation's own signed-in owner
-      // (matched by verified email) gets Edit/Cancel controls.
+      // (matched by verified email) gets Edit/Cancel controls. This is a UI
+      // nicety only; Postgres RLS is what actually enforces it server-side
+      // even if someone tampered with this check in devtools.
       if (user && user.email === r.email) {
         var actions = document.createElement("span");
         actions.className = "upcoming-actions";
@@ -590,14 +583,17 @@
         btn.className = "btn-cancel";
         btn.textContent = "Cancel";
         btn.addEventListener("click", function () {
-          if (window.confirm("Cancel this reservation for " + roomId + " on " + r.date + "?")) {
+          if (!window.confirm("Cancel this reservation for " + roomId + " on " + r.date + "?")) return;
+          btn.disabled = true;
+          deleteReservation(r.id).then(function (result) {
+            if (result.error) {
+              btn.disabled = false;
+              window.alert("Could not cancel this reservation: " + result.error.message);
+              return;
+            }
             if (editingReservationId === r.id) exitEditMode();
-            cancelReservationById(r.id);
-            renderDayGrid();
-            renderUpcomingList();
-            renderModalStatus();
-            updateOccupancy(currentFloor);
-          }
+            reloadAndRender();
+          });
         });
         actions.appendChild(btn);
 
@@ -637,6 +633,11 @@
       return;
     }
 
+    // Fast client-side pre-checks, for a specific error message naming the
+    // conflicting room/time. These are just a UX nicety — the database's own
+    // EXCLUDE constraints are the real backstop (see the .catch-equivalent
+    // error handling below), so a conflict that slips past this check (e.g.
+    // a race with another request) is still rejected server-side.
     if (hasConflict(floor, roomId, date, startHour, duration, editingReservationId)) {
       errorEl.textContent = "That time conflicts with an existing reservation for this room. Please choose another time.";
       return;
@@ -651,36 +652,51 @@
       return;
     }
 
-    if (editingReservationId) {
-      updateReservationById(editingReservationId, {
-        date: date,
-        startHour: startHour,
-        durationHours: duration,
-        email: user.email,
-        name: user.name,
-      });
-    } else {
-      addReservation({
-        id: makeId(),
-        floor: floor,
-        roomId: roomId,
-        date: date,
-        startHour: startHour,
-        durationHours: duration,
-        email: user.email,
-        name: user.name,
-      });
-    }
+    var payload = {
+      floor: floor,
+      room_id: roomId,
+      reservation_date: date,
+      start_hour: startHour,
+      duration_hours: duration,
+      email: user.email,
+      name: user.name,
+    };
 
-    exitEditMode();
-    errorEl.textContent = "";
-    document.getElementById("reserveDuration").value = "1";
-    populateReserveStartOptions();
+    var submitBtn = document.getElementById("reserveSubmitBtn");
+    var wasEditing = editingReservationId;
+    submitBtn.disabled = true;
+    errorEl.textContent = "Saving…";
 
-    renderDayGrid();
-    renderUpcomingList();
-    renderModalStatus();
-    updateOccupancy(currentFloor);
+    var request = wasEditing
+      ? updateReservation(wasEditing, payload)
+      : createReservation(payload);
+
+    request.then(function (result) {
+      submitBtn.disabled = false;
+
+      if (result.error) {
+        if (isExclusionViolation(result.error)) {
+          // The client-side pre-check above missed this — most likely
+          // someone else's request landed in the moment between our check
+          // and our insert/update. The database rejected it for real; make
+          // sure the UI reflects the up-to-date state rather than looking
+          // like the save silently worked.
+          errorEl.textContent =
+            "That time is no longer available — it was just booked. Please pick another time.";
+        } else {
+          errorEl.textContent = "Could not save this reservation: " + result.error.message;
+        }
+        reloadAndRender();
+        return;
+      }
+
+      exitEditMode();
+      errorEl.textContent = "";
+      document.getElementById("reserveDuration").value = "1";
+      populateReserveStartOptions();
+
+      reloadAndRender();
+    });
   }
 
   function setupModalHandlers() {
@@ -712,22 +728,18 @@
       document.getElementById("formError").textContent = "";
     });
 
-    document.getElementById("signOutBtn").addEventListener("click", function () {
-      clearCurrentUser();
-      if (window.google && google.accounts && google.accounts.id) {
-        try {
-          google.accounts.id.disableAutoSelect();
-        } catch (e) {
-          // ignore — GIS may not be loaded in this environment
-        }
-      }
-    });
+    document.getElementById("googleSignInButton").addEventListener("click", signIn);
+    document.getElementById("signOutBtn").addEventListener("click", signOut);
   }
 
   // ---------------------------------------------------------------------
   // Live refresh
   // ---------------------------------------------------------------------
 
+  // Recomputes occupancy from the in-memory cache as time passes (e.g. a
+  // booking that started at 2pm should flip a room to "occupied" at 2pm even
+  // if no database row changed). Data changes themselves are picked up by
+  // the Realtime subscription (or its polling fallback) set up in init().
   function tick() {
     updateOccupancy(currentFloor);
     if (currentModalRoom) {
@@ -742,11 +754,19 @@
   function init() {
     setupFloorTabs();
     setupModalHandlers();
+    setupAuth();
     renderFloor(currentFloor);
-    tryInitGoogleSignIn();
-    renderAuthArea();
-    applyTestUserFromQuery();
     setInterval(tick, REFRESH_INTERVAL_MS);
+
+    refreshReservationsCache().then(function () {
+      renderFloor(currentFloor);
+      if (currentModalRoom) {
+        renderDayGrid();
+        renderUpcomingList();
+        renderModalStatus();
+      }
+    });
+    setupRealtime();
   }
 
   if (document.readyState === "loading") {

@@ -1,5 +1,7 @@
-// Public OAuth Client ID from Google Cloud Console (APIs & Services > Credentials).
-// Not a secret — safe to commit. Replace with your own to enable real sign-in.
-// Authorized JavaScript origins must include this site's origin (e.g.
-// https://alexlin93.github.io) and http://localhost:<port> for local testing.
-const GOOGLE_CLIENT_ID = "1059149068643-5efdj4ev3s5q90lrrpgr0ueqliit3468.apps.googleusercontent.com";
+// Supabase project connection info. The anon/public key is safe to embed
+// client-side (same trust level as the old Google OAuth Client ID) — it only
+// grants whatever access this project's Row Level Security policies allow
+// (see supabase/schema.sql). Real authorization happens via Postgres RLS,
+// keyed off the caller's verified JWT, not off this key.
+const SUPABASE_URL = "https://fkpbxgfbspwrxoptlcqc.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZrcGJ4Z2Zic3B3cnhvcHRsY3FjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4MDYxMDMsImV4cCI6MjA5OTM4MjEwM30.nT1tYoHrUNg7l-4UgSN8aNztCtmTg04zivtJpXjYTbU";
