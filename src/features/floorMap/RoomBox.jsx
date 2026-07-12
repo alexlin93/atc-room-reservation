@@ -6,14 +6,26 @@ import { computeRoomLabelStyle } from "../../utils/roomLabel";
 // text for boxes whose height is meaningfully greater than their width,
 // font-size tiered/shrunk to fit small boxes. Clicking (or Enter/Space)
 // opens the room modal via onActivate.
-export default function RoomBox({ room, data, occupied, isMine, onActivate }) {
+//
+// isReservable (default true) — admin room-toggle feature (see
+// hooks/useRoomOverrides.js): when false, shows greyed-out/disabled styling
+// instead of the normal green/red coloring. Whether clicking still does
+// anything in that state is decided by the caller's onActivate (FloorMap.jsx
+// skips it for non-admins, still allows it for admins).
+export default function RoomBox({ room, data, occupied, isMine, isReservable = true, onActivate }) {
   const labelStyle = computeRoomLabelStyle(room, data);
   const title =
-    room.id + (occupied ? " — reserved now" : " — free now") + (isMine ? " — one of your reservations" : "");
+    room.id +
+    (isReservable ? (occupied ? " — reserved now" : " — free now") : " — currently unavailable") +
+    (isMine ? " — one of your reservations" : "");
 
   return (
     <div
-      className={"room-box" + (occupied ? " occupied" : " free") + (isMine ? " room-box-mine" : "")}
+      className={
+        "room-box" +
+        (isReservable ? (occupied ? " occupied" : " free") : " room-box-disabled") +
+        (isMine ? " room-box-mine" : "")
+      }
       data-room-id={room.id}
       style={percentStyle(room, data)}
       title={title}

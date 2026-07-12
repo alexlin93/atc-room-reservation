@@ -19,7 +19,13 @@ export function todayStr(now = new Date()) {
 // already fully elapsed. `now` defaults to a fresh Date() at call time,
 // same as the original (only recomputed when explicitly called, not on a
 // ticking timer).
-export function earliestRelevantHour(date, now = new Date()) {
+// `allowPast` (default false) lets an admin bypass the "omit elapsed hours
+// for today" convenience entirely (RoomModal.jsx passes this through for
+// isAdmin), so the full OPEN_HOUR..CLOSE_HOUR-1 range is always offered for
+// today too, not just for other dates. Existing callers that don't pass it
+// keep the original behavior.
+export function earliestRelevantHour(date, now = new Date(), { allowPast = false } = {}) {
+  if (allowPast) return OPEN_HOUR;
   if (date !== todayStr(now)) return OPEN_HOUR;
   return Math.max(OPEN_HOUR, now.getHours());
 }
@@ -64,10 +70,10 @@ export function currentReservation(reservations, floor, roomId, now = new Date()
 // that have already started/passed. `now` is captured fresh at call time
 // (only recomputed on open/date-change/duration-change, matching the
 // original — not on every 30s tick).
-export function computeStartOptions(date, duration, now = new Date()) {
+export function computeStartOptions(date, duration, now = new Date(), timeOptions) {
   const options = [];
   const maxStart = CLOSE_HOUR - duration;
-  const minStart = earliestRelevantHour(date, now);
+  const minStart = earliestRelevantHour(date, now, timeOptions);
   for (let h = minStart; h <= maxStart; h++) {
     options.push({ value: String(h), label: hourLabel(h) });
   }

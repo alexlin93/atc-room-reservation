@@ -4,6 +4,7 @@ import AuthArea from "./features/auth/AuthArea";
 import FloorTabs from "./features/floorMap/FloorTabs";
 import Legend from "./features/floorMap/Legend";
 import { useReservations } from "./hooks/useReservations";
+import { useRoomOverrides } from "./hooks/useRoomOverrides";
 import { useNow } from "./hooks/useNow";
 import WelcomeScreen from "./pages/WelcomeScreen";
 import MainAppPage from "./pages/MainAppPage";
@@ -18,9 +19,10 @@ const REFRESH_INTERVAL_MS = 30000; // recompute "is it occupied right now" as ti
 // area — kept together here, matching the original app's exact sticky
 // header layout/CSS) alongside whichever page is currently showing.
 export default function App() {
-  const { user, signIn, signOut } = useAuth();
+  const { user, isAdmin, signIn, signOut } = useAuth();
   const { reservations, loaded, refresh, insertReservation, updateReservationRow, deleteReservationRow } =
     useReservations();
+  const { isRoomReservable, setRoomReservable, refresh: refreshRoomOverrides } = useRoomOverrides();
   const now = useNow(REFRESH_INTERVAL_MS);
 
   const [floor, setFloor] = useState(3);
@@ -91,7 +93,13 @@ export default function App() {
           style={{ display: showAppChrome ? "flex" : "none" }}
         />
         <Legend style={{ display: showAppChrome ? "flex" : "none" }} />
-        <AuthArea user={user} onSignIn={signIn} onSignOut={signOut} onOpenMyReservations={openMyReservations} />
+        <AuthArea
+          user={user}
+          isAdmin={isAdmin}
+          onSignIn={signIn}
+          onSignOut={signOut}
+          onOpenMyReservations={openMyReservations}
+        />
       </header>
 
       <WelcomeScreen visible={!user} onSignIn={signIn} />
@@ -103,6 +111,10 @@ export default function App() {
         reservations={reservations}
         now={now}
         user={user}
+        isAdmin={isAdmin}
+        isRoomReservable={isRoomReservable}
+        setRoomReservable={setRoomReservable}
+        refreshRoomOverrides={refreshRoomOverrides}
         modalTarget={modalTarget}
         onOpenModal={openModal}
         onCloseModal={closeModal}
@@ -115,9 +127,11 @@ export default function App() {
       {myResOpen && (
         <MyReservationsPage
           user={user}
+          isAdmin={isAdmin}
           reservations={reservations}
           now={now}
           currentFloor={floor}
+          isRoomReservable={isRoomReservable}
           onClose={closeMyReservations}
           onEditReservation={handleEditFromMyRes}
           onOpenRoom={handleOpenRoomFromMyRes}

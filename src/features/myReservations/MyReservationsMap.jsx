@@ -6,7 +6,16 @@ import FloorMap from "../floorMap/FloorMap";
 // FloorMap rendering as the main map, with a floor toggle, and the user's
 // own reserved room(s) visually distinguished (highlightRoomIds -> the
 // room-box-mine styling).
-export default function MyReservationsMap({ floor, onFloorChange, reservations, now, highlightRoomIds, onRoomClick }) {
+export default function MyReservationsMap({
+  floor,
+  onFloorChange,
+  reservations,
+  now,
+  highlightRoomIds,
+  onRoomClick,
+  isRoomReservable,
+  isAdmin,
+}) {
   const data = FLOORS[floor];
 
   return (
@@ -23,6 +32,8 @@ export default function MyReservationsMap({ floor, onFloorChange, reservations, 
           highlightRoomIds={highlightRoomIds}
           onRoomClick={onRoomClick}
           canvasId="myResMapCanvas"
+          isRoomReservable={isRoomReservable}
+          isAdmin={isAdmin}
         />
       </div>
       <div className="myres-map-legend">
