@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../../services/supabaseClient";
+import { checkIsAdmin } from "../../services/adminService";
 
 // Query/hash param names that either OAuth flow (implicit or PKCE) or a
 // provider error can leave in the URL after the redirect back from Google.
@@ -59,6 +60,7 @@ export function getCurrentUser(session) {
 // there's no flash of the map before the auth check resolves.
 export function useAuth() {
   const [session, setSession] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
@@ -100,5 +102,25 @@ export function useAuth() {
   }, []);
 
   const user = getCurrentUser(session);
-  return { session, user, signIn, signOut };
+  const userEmail = user ? user.email : null;
+
+  // Re-checks admin status whenever the signed-in email changes (including
+  // signing out, which clears it back to false). Guarded with a `cancelled`
+  // flag so a slow check for a since-replaced email (fast sign-out/sign-in
+  // of a different account) can't clobber isAdmin with a stale result.
+  useEffect(() => {
+    if (!userEmail) {
+      setIsAdmin(false);
+      return;
+    }
+    let cancelled = false;
+    checkIsAdmin(userEmail).then((result) => {
+      if (!cancelled) setIsAdmin(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [userEmail]);
+
+  return { session, user, isAdmin, signIn, signOut };
 }

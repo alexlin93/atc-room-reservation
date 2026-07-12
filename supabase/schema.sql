@@ -99,3 +99,99 @@ begin
       add constraint starts_not_in_past check (starts_at >= now() - interval '5 minutes');
   end if;
 end $$;
+
+-- ---------------------------------------------------------------------
+-- Admin role.
+--
+-- `admins` is the source of truth for who has elevated capabilities in the
+-- app (edit/cancel any reservation, bypass the past-time restriction, and
+-- toggle a room's reservable/unreservable status). It's deliberately just a
+-- table of emails with RLS allowing anyone to read it (so the client can
+-- check "am I an admin?") but no insert/update/delete policy at all — rows
+-- can only be added or removed by the project owner directly via the
+-- Supabase dashboard/SQL editor (e.g.
+-- `insert into admins (email) values ('someone@example.com');`), not
+-- through the app. There is intentionally no "promote to admin" UI.
+-- ---------------------------------------------------------------------
+create table if not exists admins (
+  email text primary key
+);
+alter table admins enable row level security;
+
+drop policy if exists "Anyone can check admin status" on admins;
+create policy "Anyone can check admin status" on admins for select using (true);
+-- Deliberately no insert/update/delete policy: admins can only be added/removed
+-- by the project owner directly via the Supabase dashboard/SQL editor, matching
+-- what the user asked for ("editable and added to in the supabase postgres db").
+
+-- ---------------------------------------------------------------------
+-- Per-room admin override: lets an admin mark a specific room as not
+-- currently reservable (e.g. taken out of service), reflected live to every
+-- visitor on the map. Only admins can write; anyone can read, same
+-- visibility model as `reservations` and `admins` above.
+-- ---------------------------------------------------------------------
+create table if not exists room_overrides (
+  floor smallint not null,
+  room_id text not null,
+  is_reservable boolean not null default true,
+  updated_by text,
+  updated_at timestamptz not null default now(),
+  primary key (floor, room_id)
+);
+alter table room_overrides enable row level security;
+
+drop policy if exists "Anyone can view room overrides" on room_overrides;
+create policy "Anyone can view room overrides" on room_overrides for select using (true);
+
+drop policy if exists "Admins can insert room overrides" on room_overrides;
+create policy "Admins can insert room overrides" on room_overrides for insert
+  with check (exists (select 1 from admins where admins.email = auth.jwt() ->> 'email'));
+
+drop policy if exists "Admins can update room overrides" on room_overrides;
+create policy "Admins can update room overrides" on room_overrides for update
+  using (exists (select 1 from admins where admins.email = auth.jwt() ->> 'email'));
+
+-- ---------------------------------------------------------------------
+-- Broaden the existing "own reservation only" update/delete policies so an
+-- admin can also edit/cancel *any* reservation, not just their own. Written
+-- as drop-then-recreate (like the rest of this file) so re-running the
+-- whole script is always safe, and appended down here — rather than edited
+-- in place above — so `admins` already exists by the time these are
+-- (re)created (CREATE POLICY validates the query, including the `admins`
+-- reference, at creation time).
+-- ---------------------------------------------------------------------
+drop policy if exists "Users can update their own reservations" on reservations;
+create policy "Users can update their own reservations"
+  on reservations for update
+  using (
+    email = auth.jwt() ->> 'email'
+    or exists (select 1 from admins where admins.email = auth.jwt() ->> 'email')
+  )
+  with check (
+    email = auth.jwt() ->> 'email'
+    or exists (select 1 from admins where admins.email = auth.jwt() ->> 'email')
+  );
+
+drop policy if exists "Users can delete their own reservations" on reservations;
+create policy "Users can delete their own reservations"
+  on reservations for delete
+  using (
+    email = auth.jwt() ->> 'email'
+    or exists (select 1 from admins where admins.email = auth.jwt() ->> 'email')
+  );
+
+-- ---------------------------------------------------------------------
+-- Let an admin bypass only the past-time restriction (starts_not_in_past),
+-- not the open/close-hour bounds baked into start_hour's CHECK, and not
+-- either EXCLUDE constraint (same-room double-booking, or the "one room at
+-- a time" cross-room rule) — those apply to everyone, admins included. This
+-- is the one CHECK the user specifically asked admins be able to skip
+-- ("create a reservation without the time restriction"), so only this
+-- constraint is touched.
+-- ---------------------------------------------------------------------
+alter table reservations drop constraint if exists starts_not_in_past;
+alter table reservations
+  add constraint starts_not_in_past check (
+    starts_at >= now() - interval '5 minutes'
+    or exists (select 1 from admins where admins.email = auth.jwt() ->> 'email')
+  );

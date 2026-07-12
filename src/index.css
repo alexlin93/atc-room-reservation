@@ -192,6 +192,19 @@ body {
   border-radius: 3px;
 }
 
+.admin-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--color-primary-dark);
+  background: #eaf1fd;
+  border: 1px solid var(--color-primary);
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+}
+
 /* ---------- Gating (signed-out vs signed-in) ---------- */
 /* Default assumes signed-out (the safe starting state) until app.js's
    auth check confirms a real session, then flips these via inline
@@ -342,6 +355,16 @@ main {
   border-color: var(--color-occupied-border);
 }
 
+/* Admin-toggled "not currently reservable" room (src/hooks/useRoomOverrides.js).
+   Deliberately flat/neutral instead of the free (green) or occupied (red)
+   coloring, so an unreservable room reads as a distinct third state rather
+   than looking free or busy. */
+.room-box.room-box-disabled {
+  background: var(--color-na-bg);
+  border-color: var(--color-na-border);
+  color: var(--color-text-muted);
+}
+
 /* Highlights the signed-in user's own reservation(s) on the My Reservations
    page's floor-plan visual. Layered on top of the normal free/occupied
    coloring (not a replacement for it) via a distinct border + outer glow,
@@ -450,6 +473,30 @@ main {
   color: var(--color-occupied);
   background: var(--color-occupied-bg);
   border: 1px solid var(--color-occupied-border);
+}
+
+.admin-room-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 0.4rem 0.65rem;
+  margin-bottom: 0.75rem;
+}
+
+.room-unreservable-notice {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  background: var(--color-na-bg);
+  border: 1px solid var(--color-na-border);
+  border-radius: 6px;
+  padding: 0.5rem 0.65rem;
+  margin-bottom: 0.75rem;
 }
 
 .schedule-controls {

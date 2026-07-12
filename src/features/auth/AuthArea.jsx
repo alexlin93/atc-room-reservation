@@ -3,7 +3,7 @@
 // signed in. Both states stay mounted; visibility is toggled via inline
 // style (matching style.css's expectations) rather than mount/unmount, so
 // there's no layout jump in the sticky header.
-export default function AuthArea({ user, onSignIn, onSignOut, onOpenMyReservations }) {
+export default function AuthArea({ user, isAdmin, onSignIn, onSignOut, onOpenMyReservations }) {
   return (
     <div className="auth-area" id="authArea">
       <button
@@ -32,6 +32,11 @@ export default function AuthArea({ user, onSignIn, onSignOut, onOpenMyReservatio
         >
           {user ? `${user.name ? user.name + " " : ""}(${user.email})` : ""}
         </span>
+        {isAdmin && (
+          <span className="admin-badge" id="adminBadge" title="Admin">
+            🛡️ Admin
+          </span>
+        )}
         <button type="button" id="signOutBtn" className="btn-link" onClick={onSignOut}>
           Sign out
         </button>

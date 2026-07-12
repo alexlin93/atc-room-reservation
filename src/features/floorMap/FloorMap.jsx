@@ -13,7 +13,23 @@ import RoomBox from "./RoomBox";
 //   highlightRoomIds — array of room ids to mark with the distinct
 //     "room-box-mine" styling (used by My Reservations to call out the
 //     signed-in user's own bookings).
-export default function FloorMap({ floor, reservations, now, onRoomClick, highlightRoomIds, canvasId }) {
+//   isRoomReservable(floor, roomId) — optional; admin room-toggle feature
+//     (see hooks/useRoomOverrides.js). Defaults to always-reservable when
+//     omitted, so existing callers are unaffected. A room an admin has
+//     marked unreservable renders greyed-out for everyone, and its normal
+//     click-to-reserve behavior is skipped for non-admins (admins can still
+//     click through, e.g. to toggle it back on via the room modal).
+//   isAdmin — optional, default false; see isRoomReservable above.
+export default function FloorMap({
+  floor,
+  reservations,
+  now,
+  onRoomClick,
+  highlightRoomIds,
+  canvasId,
+  isRoomReservable,
+  isAdmin,
+}) {
   const data = FLOORS[floor];
   if (!data) return null;
 
@@ -30,6 +46,7 @@ export default function FloorMap({ floor, reservations, now, onRoomClick, highli
       {data.rooms.map((room) => {
         const occupied = !!currentReservation(reservations, floor, room.id, now);
         const isMine = !!(highlightRoomIds && highlightRoomIds.indexOf(room.id) !== -1);
+        const reservable = isRoomReservable ? isRoomReservable(floor, room.id) : true;
         return (
           <RoomBox
             key={room.id}
@@ -37,7 +54,14 @@ export default function FloorMap({ floor, reservations, now, onRoomClick, highli
             data={data}
             occupied={occupied}
             isMine={isMine}
-            onActivate={() => onRoomClick(floor, room.id)}
+            isReservable={reservable}
+            onActivate={() => {
+              // A non-admin can't do anything useful in the modal for a
+              // room an admin has taken offline, so skip opening it at all;
+              // an admin still needs to reach it (e.g. to toggle it back on).
+              if (!reservable && !isAdmin) return;
+              onRoomClick(floor, room.id);
+            }}
           />
         );
       })}

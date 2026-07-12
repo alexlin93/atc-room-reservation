@@ -16,6 +16,10 @@ export default function MainAppPage({
   reservations,
   now,
   user,
+  isAdmin,
+  isRoomReservable,
+  setRoomReservable,
+  refreshRoomOverrides,
   modalTarget,
   onOpenModal,
   onCloseModal,
@@ -38,7 +42,15 @@ export default function MainAppPage({
           {loaded ? "" : " — loading reservations…"}
         </div>
         <div className="map-wrap">
-          <FloorMap floor={floor} reservations={reservations} now={now} onRoomClick={onOpenModal} canvasId="mapCanvas" />
+          <FloorMap
+            floor={floor}
+            reservations={reservations}
+            now={now}
+            onRoomClick={onOpenModal}
+            canvasId="mapCanvas"
+            isRoomReservable={isRoomReservable}
+            isAdmin={isAdmin}
+          />
         </div>
       </main>
 
@@ -60,6 +72,10 @@ export default function MainAppPage({
             loaded={loaded}
             now={now}
             user={user}
+            isAdmin={isAdmin}
+            isRoomReservable={isRoomReservable}
+            setRoomReservable={setRoomReservable}
+            refreshRoomOverrides={refreshRoomOverrides}
             insertReservation={insertReservation}
             updateReservationRow={updateReservationRow}
             deleteReservationRow={deleteReservationRow}

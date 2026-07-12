@@ -11,9 +11,11 @@ import MyReservationsMap from "../features/myReservations/MyReservationsMap";
 // table/map logic lives in the myReservations feature components.
 export default function MyReservationsPage({
   user,
+  isAdmin,
   reservations,
   now,
   currentFloor,
+  isRoomReservable,
   onClose,
   onEditReservation,
   onOpenRoom,
@@ -66,6 +68,8 @@ export default function MyReservationsPage({
             now={now}
             highlightRoomIds={highlightRoomIds}
             onRoomClick={onOpenRoom}
+            isRoomReservable={isRoomReservable}
+            isAdmin={isAdmin}
           />
         </div>
 
