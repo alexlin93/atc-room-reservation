@@ -19,6 +19,8 @@
   --color-na-border: #cbd1d8;
   --color-zone-bg: rgba(100, 116, 139, 0.05);
   --color-zone-border: #94a3b8;
+  --color-mine: #7c3aed;
+  --color-mine-bg: rgba(124, 58, 237, 0.12);
   --radius: 8px;
   --shadow-modal: 0 12px 40px rgba(15, 23, 42, 0.25);
 }
@@ -173,6 +175,23 @@ body {
   background: var(--color-free-bg);
 }
 
+/* Signed-in name doubles as the entry point into the My Reservations page. */
+.signed-in-name {
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.signed-in-name:hover {
+  color: var(--color-primary);
+}
+
+.signed-in-name:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
 /* ---------- Gating (signed-out vs signed-in) ---------- */
 /* Default assumes signed-out (the safe starting state) until app.js's
    auth check confirms a real session, then flips these via inline
@@ -321,6 +340,16 @@ main {
 .room-box.occupied {
   background: var(--color-occupied-bg);
   border-color: var(--color-occupied-border);
+}
+
+/* Highlights the signed-in user's own reservation(s) on the My Reservations
+   page's floor-plan visual. Layered on top of the normal free/occupied
+   coloring (not a replacement for it) via a distinct border + outer glow,
+   so "this room is mine" reads independently of "this room is busy". */
+.room-box.room-box-mine {
+  border-width: 3px;
+  border-color: var(--color-mine);
+  box-shadow: 0 0 0 3px var(--color-mine-bg);
 }
 
 .room-label {
@@ -657,6 +686,101 @@ main {
 
 .btn-edit:hover {
   background: #d7e6fc;
+}
+
+/* ---------- My Reservations page ---------- */
+/* A second overlay reusing the same .modal-overlay/.modal mechanics as the
+   room modal (open/close, backdrop, Escape-to-close), just wider — sized
+   and laid out to feel like "a page" (table, then the floor-plan visual
+   below it) rather than a small popover.
+
+   The table and map are stacked (not side by side) so the map gets close
+   to the same rendered width as the main page's map — computeRoomLabelStyle
+   in app.js sizes room labels against an assumed ~1240px canvas width
+   (deliberately, since the actual rendered width isn't reliably knowable
+   at render time — see its comment), so a much narrower map here would
+   make labels overflow their boxes. */
+
+.myres-modal {
+  max-width: 980px;
+}
+
+.myres-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  margin-top: 0.5rem;
+}
+
+.myres-table-wrap {
+  overflow-x: auto;
+}
+
+.myres-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.myres-table th,
+.myres-table td {
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.myres-table th {
+  color: var(--color-text-muted);
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+.myres-table th:last-child,
+.myres-table td:last-child {
+  text-align: right;
+}
+
+.myres-row-actions {
+  display: inline-flex;
+  gap: 0.4rem;
+  justify-content: flex-end;
+}
+
+.myres-empty {
+  display: none;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  font-style: italic;
+  padding: 0.75rem 0;
+}
+
+.myres-maps {
+  width: 100%;
+}
+
+.myres-maps-tabs {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.6rem;
+}
+
+.myres-map-legend {
+  margin-top: 0.6rem;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.swatch.mine {
+  background: var(--color-mine-bg);
+  border-color: var(--color-mine);
+  border-width: 2px;
+}
+
+.myres-footer {
+  border-top: 1px solid var(--color-border);
+  padding-top: 0.75rem;
+  margin-top: 1.25rem;
 }
 
 /* ---------- Responsive ---------- */

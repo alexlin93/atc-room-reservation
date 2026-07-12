@@ -8,7 +8,11 @@
 // Conference Room, Kid's Auditorium, and Lakeside Living Room). The
 // unlabeled classroom rows (Harvest Christian Academy tenant space) and
 // the unlabeled central core (stairs/elevators/restrooms/open areas) are
-// not reservable.
+// not reservable. The central core is broken into a "Hallway" zone (the
+// open circulation area) plus two "Elevator" markers (near the central
+// stairs column, roughly where the elevator icons sit on the original
+// floor plan) instead of one undifferentiated "Not Reservable" block, so
+// the map reads more like a real floor plan.
 
 const FLOORS = {
   3: {
@@ -18,7 +22,9 @@ const FLOORS = {
     canvasHeight: 1500,
     zones: [
       { label: "Harvest Christian Academy", x: 160, y: 340, w: 1440, h: 280 },
-      { label: "Not Reservable", x: 160, y: 620, w: 1400, h: 610 },
+      { label: "Hallway", x: 160, y: 620, w: 1400, h: 610 },
+      { label: "Elevator", x: 810, y: 660, w: 100, h: 70 },
+      { label: "Elevator", x: 810, y: 1140, w: 100, h: 70 },
       { label: "Not Reservable", x: 600, y: 1310, w: 160, h: 130 },
     ],
     rooms: [
@@ -64,7 +70,9 @@ const FLOORS = {
     canvasHeight: 1500,
     zones: [
       { label: "Harvest Christian Academy", x: 160, y: 340, w: 1440, h: 280 },
-      { label: "Not Reservable", x: 160, y: 620, w: 1400, h: 610 },
+      { label: "Hallway", x: 160, y: 620, w: 1400, h: 610 },
+      { label: "Elevator", x: 810, y: 660, w: 100, h: 70 },
+      { label: "Elevator", x: 810, y: 1140, w: 100, h: 70 },
       { label: "Not Reservable", x: 280, y: 1240, w: 700, h: 150 },
     ],
     rooms: [

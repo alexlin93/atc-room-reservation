@@ -10,7 +10,25 @@
 
   // The Supabase JS UMD bundle exposes a global named `supabase` — our own
   // client instance is deliberately NOT named that to avoid shadowing it.
-  var db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  //
+  // auth options are explicit (rather than relying on this library version's
+  // defaults) for two reasons:
+  //   - flowType: "pkce" — PKCE only ever puts a short-lived, single-use
+  //     authorization `code` (and `state`) in the redirect URL, never a live
+  //     access/refresh token. That's a real security improvement over the
+  //     implicit flow, which returns the tokens themselves in the URL hash.
+  //   - detectSessionInUrl: true — required for either flow so the client
+  //     parses the auth params out of the URL on load; see
+  //     stripAuthParamsFromUrl() below for the matching cleanup step (this
+  //     option alone does not remove the params from the address bar).
+  var db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: {
+      flowType: "pkce",
+      detectSessionInUrl: true,
+      persistSession: true,
+      autoRefreshToken: true,
+    },
+  });
 
   var currentFloor = 3;
   var currentModalRoom = null; // { floor, roomId }
@@ -52,7 +70,8 @@
   }
 
   // Re-fetches the whole table, then re-renders whatever's currently on
-  // screen that depends on it (map occupancy, and the modal if it's open).
+  // screen that depends on it (map occupancy, the modal if it's open, and
+  // the My Reservations page if it's open).
   async function reloadAndRender() {
     await refreshReservationsCache();
     updateOccupancy(currentFloor);
@@ -61,6 +80,7 @@
       renderUpcomingList();
       renderModalStatus();
     }
+    renderMyReservationsView();
   }
 
   function getReservationsFor(floor, roomId, date) {
@@ -172,15 +192,69 @@
     return { email: user.email, name: name };
   }
 
+  // Query/hash param names that either OAuth flow (implicit or PKCE) or a
+  // provider error can leave in the URL after the redirect back from Google.
+  // Checked defensively as a set, rather than assuming exactly one flow
+  // type, since Supabase (or a future config change) could hand back either
+  // shape and leaving any of them visible in the address bar is the bug.
+  var AUTH_URL_PARAM_KEYS = [
+    "access_token",
+    "refresh_token",
+    "expires_in",
+    "expires_at",
+    "token_type",
+    "provider_token",
+    "provider_refresh_token",
+    "code",
+    "state",
+    "error",
+    "error_code",
+    "error_description",
+    "type",
+  ];
+
+  function urlHasAuthParams(paramsString) {
+    if (!paramsString) return false;
+    var params = new URLSearchParams(paramsString);
+    return AUTH_URL_PARAM_KEYS.some(function (key) {
+      return params.has(key);
+    });
+  }
+
+  // Strips any leftover OAuth params from the URL hash and/or query string
+  // (however Supabase's client just consumed them from) so the address bar
+  // never keeps showing a token/code after sign-in — and so a *later*
+  // sign-in's redirectTo (computed fresh each time from origin+pathname,
+  // see signIn() below) never has to account for stale state either way.
+  function stripAuthParamsFromUrl() {
+    var hasHashAuthParams = urlHasAuthParams(
+      window.location.hash ? window.location.hash.slice(1) : ""
+    );
+    var hasQueryAuthParams = urlHasAuthParams(window.location.search);
+    if (!hasHashAuthParams && !hasQueryAuthParams) return;
+    var cleanUrl = window.location.origin + window.location.pathname;
+    window.history.replaceState(null, "", cleanUrl);
+  }
+
   function signIn() {
     db.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: window.location.href },
+      // A canonical clean URL, not window.location.href — reusing the
+      // current href would bake in whatever hash/query happens to be
+      // sitting in the address bar (e.g. a previous login's leftover auth
+      // params, if this ever ran before stripAuthParamsFromUrl had a chance
+      // to fire), breaking the OAuth round-trip on repeated sign-in cycles.
+      options: { redirectTo: window.location.origin + window.location.pathname },
     });
   }
 
   function signOut() {
     db.auth.signOut();
+    // signOut() doesn't touch the URL itself, but run the same defensive
+    // cleanup here for symmetry — onAuthStateChange's SIGNED_OUT event also
+    // triggers it, so this is a harmless no-op in practice, not a load-
+    // bearing second code path.
+    stripAuthParamsFromUrl();
   }
 
   function renderAuthArea() {
@@ -232,6 +306,11 @@
   function refreshAuthUI() {
     renderAuthArea();
     updateAppGate();
+    if (!getCurrentUser()) {
+      // Nothing meaningful to show for a signed-out visitor, and the data
+      // was scoped to whoever just signed out.
+      closeMyReservations();
+    }
     if (currentModalRoom) {
       exitEditMode();
       updateReserveFormVisibility();
@@ -242,6 +321,10 @@
   function setupAuth() {
     db.auth.onAuthStateChange(function (_event, session) {
       currentSession = session;
+      // Fires after Supabase's client has parsed (or attempted to parse)
+      // any auth params out of the URL for this event, so it's safe to
+      // scrub them from the address bar here.
+      stripAuthParamsFromUrl();
       refreshAuthUI();
     });
 
@@ -250,6 +333,7 @@
     // URL.
     db.auth.getSession().then(function (result) {
       currentSession = (result.data && result.data.session) || null;
+      stripAuthParamsFromUrl();
       refreshAuthUI();
     });
   }
@@ -359,15 +443,24 @@
     return { isVertical: isVertical, fontPx: Math.round(fontPx * 10) / 10 };
   }
 
-  function renderFloor(floor) {
-    currentFloor = floor;
+  // Builds the zone/room DOM inside `canvas` for a given floor. Shared by
+  // the main map (renderFloor, below) and the My Reservations page's
+  // floor-plan visual, so there is exactly one place that knows how to turn
+  // FLOORS data into boxes on screen.
+  //
+  // opts:
+  //   onRoomClick(floor, roomId) — called instead of the default openModal
+  //     when a room box is activated (click or Enter/Space). Lets callers
+  //     (e.g. My Reservations) do something first, like closing their own
+  //     overlay, before the room modal opens.
+  //   highlightRoomIds — array of room ids to mark with the distinct
+  //     "room-box-mine" styling (used by My Reservations to call out the
+  //     signed-in user's own bookings).
+  function populateFloorCanvas(canvas, floor, opts) {
+    opts = opts || {};
     var data = FLOORS[floor];
     if (!data) return;
 
-    var floorTitleEl = document.getElementById("floorTitle");
-    floorTitleEl.textContent = data.title + (reservationsLoaded ? "" : " — loading reservations…");
-
-    var canvas = document.getElementById("mapCanvas");
     canvas.innerHTML = "";
     canvas.style.aspectRatio = data.canvasWidth + " / " + data.canvasHeight;
 
@@ -390,7 +483,9 @@
 
       var occupied = !!currentReservation(floor, room.id);
       el.classList.add(occupied ? "occupied" : "free");
-      el.title = room.id + (occupied ? " — reserved now" : " — free now");
+      var isMine = !!(opts.highlightRoomIds && opts.highlightRoomIds.indexOf(room.id) !== -1);
+      if (isMine) el.classList.add("room-box-mine");
+      el.title = room.id + (occupied ? " — reserved now" : " — free now") + (isMine ? " — one of your reservations" : "");
       el.tabIndex = 0;
       el.setAttribute("role", "button");
 
@@ -402,18 +497,31 @@
       label.style.fontSize = labelStyle.fontPx + "px";
       el.appendChild(label);
 
+      var onClick = opts.onRoomClick || openModal;
       el.addEventListener("click", function () {
-        openModal(floor, room.id);
+        onClick(floor, room.id);
       });
       el.addEventListener("keydown", function (e) {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
-          openModal(floor, room.id);
+          onClick(floor, room.id);
         }
       });
 
       canvas.appendChild(el);
     });
+  }
+
+  function renderFloor(floor) {
+    currentFloor = floor;
+    var data = FLOORS[floor];
+    if (!data) return;
+
+    var floorTitleEl = document.getElementById("floorTitle");
+    floorTitleEl.textContent = data.title + (reservationsLoaded ? "" : " — loading reservations…");
+
+    var canvas = document.getElementById("mapCanvas");
+    populateFloorCanvas(canvas, floor);
   }
 
   // Cheap refresh of just occupancy colors/titles, without rebuilding the DOM.
@@ -814,7 +922,10 @@
     });
 
     document.addEventListener("keydown", function (e) {
-      if (e.key === "Escape" && document.getElementById("modalOverlay").classList.contains("open")) {
+      if (e.key !== "Escape") return;
+      if (isMyReservationsOpen()) {
+        closeMyReservations();
+      } else if (document.getElementById("modalOverlay").classList.contains("open")) {
         closeModal();
       }
     });
@@ -851,6 +962,213 @@
   }
 
   // ---------------------------------------------------------------------
+  // My Reservations page
+  //
+  // A second overlay (same open/close mechanics as the room modal) showing
+  // the signed-in user's own upcoming reservations across both floors: a
+  // table (Floor/Room/Date/Time/Edit/Cancel) plus a floor-plan visual per
+  // floor with the user's own rooms highlighted. Edit/Cancel reuse the
+  // exact same functions the room modal's upcoming list uses — this view
+  // never talks to the data layer or the conflict logic directly.
+  // ---------------------------------------------------------------------
+
+  var myResSelectedFloor = null; // which floor tab is active within this view
+
+  function isMyReservationsOpen() {
+    var el = document.getElementById("myReservationsOverlay");
+    return !!el && el.classList.contains("open");
+  }
+
+  // This user's own upcoming reservations (any floor/room), soonest first —
+  // reuses isReservationUpcoming(), the same "still worth showing" filter
+  // the room modal's upcoming list already relies on.
+  function getMyUpcomingReservations() {
+    var user = getCurrentUser();
+    if (!user) return [];
+    return reservationsCache
+      .filter(function (r) {
+        return r.email === user.email && isReservationUpcoming(r);
+      })
+      .sort(function (a, b) {
+        if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+        return a.startHour - b.startHour;
+      });
+  }
+
+  function renderMyReservationsTable(myRes) {
+    var tbody = document.getElementById("myResTableBody");
+    var emptyEl = document.getElementById("myResEmpty");
+    tbody.innerHTML = "";
+
+    if (myRes.length === 0) {
+      emptyEl.style.display = "block";
+      return;
+    }
+    emptyEl.style.display = "none";
+
+    myRes.forEach(function (r) {
+      var tr = document.createElement("tr");
+
+      var floorTd = document.createElement("td");
+      floorTd.textContent = "Floor " + r.floor;
+      tr.appendChild(floorTd);
+
+      var roomTd = document.createElement("td");
+      roomTd.textContent = r.roomId;
+      tr.appendChild(roomTd);
+
+      var dateTd = document.createElement("td");
+      dateTd.textContent = r.date;
+      tr.appendChild(dateTd);
+
+      var timeTd = document.createElement("td");
+      timeTd.textContent = timeRangeLabel(r.startHour, r.durationHours);
+      tr.appendChild(timeTd);
+
+      var actionsTd = document.createElement("td");
+      var actionsWrap = document.createElement("span");
+      actionsWrap.className = "myres-row-actions";
+
+      // Edit reuses openModal()+enterEditMode() — the identical path the
+      // room modal's own "Edit" button takes — just from a different
+      // starting point (this table instead of an already-open modal for
+      // the same room), so this closes the page first and opens the room
+      // modal for the reservation's own floor/room before pre-filling it.
+      var editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "btn-edit";
+      editBtn.textContent = "Edit";
+      editBtn.addEventListener("click", function () {
+        closeMyReservations();
+        openModal(r.floor, r.roomId);
+        enterEditMode(r);
+      });
+      actionsWrap.appendChild(editBtn);
+
+      // Cancel reuses deleteReservation() exactly as the room modal's own
+      // "Cancel" button does, then refreshes both the main map/modal (via
+      // reloadAndRender, already called from inside deleteReservation's
+      // .then in that other flow — mirrored here) and this page's own
+      // table/map.
+      var cancelBtn = document.createElement("button");
+      cancelBtn.type = "button";
+      cancelBtn.className = "btn-cancel";
+      cancelBtn.textContent = "Cancel";
+      cancelBtn.addEventListener("click", function () {
+        if (!window.confirm("Cancel this reservation for " + r.roomId + " on " + r.date + "?")) return;
+        cancelBtn.disabled = true;
+        deleteReservation(r.id).then(function (result) {
+          if (result.error) {
+            cancelBtn.disabled = false;
+            window.alert("Could not cancel this reservation: " + result.error.message);
+            return;
+          }
+          if (editingReservationId === r.id) exitEditMode();
+          reloadAndRender();
+        });
+      });
+      actionsWrap.appendChild(cancelBtn);
+
+      actionsTd.appendChild(actionsWrap);
+      tr.appendChild(actionsTd);
+      tbody.appendChild(tr);
+    });
+  }
+
+  // Renders the floor-plan visual for whichever floor tab is currently
+  // selected within this page, reusing populateFloorCanvas — the exact same
+  // function renderFloor() uses for the main map — with this user's own
+  // rooms on that floor passed in as highlightRoomIds.
+  function renderMyReservationsMap(myRes) {
+    var floor = myResSelectedFloor;
+    var data = FLOORS[floor];
+    if (!data) return;
+
+    var titleEl = document.getElementById("myResFloorTitle");
+    if (titleEl) titleEl.textContent = data.title;
+
+    var mine = myRes
+      .filter(function (r) {
+        return r.floor === floor;
+      })
+      .map(function (r) {
+        return r.roomId;
+      });
+
+    var canvas = document.getElementById("myResMapCanvas");
+    populateFloorCanvas(canvas, floor, {
+      highlightRoomIds: mine,
+      onRoomClick: function (f, roomId) {
+        closeMyReservations();
+        openModal(f, roomId);
+      },
+    });
+  }
+
+  function renderMyReservationsView() {
+    if (!isMyReservationsOpen()) return;
+    var myRes = getMyUpcomingReservations();
+    renderMyReservationsTable(myRes);
+    renderMyReservationsMap(myRes);
+  }
+
+  function openMyReservations() {
+    var user = getCurrentUser();
+    if (!user) return;
+
+    var myRes = getMyUpcomingReservations();
+    var floorsWithRes = myRes.reduce(function (acc, r) {
+      if (acc.indexOf(r.floor) === -1) acc.push(r.floor);
+      return acc;
+    }, []);
+    myResSelectedFloor = floorsWithRes.length ? floorsWithRes[0] : currentFloor;
+
+    var tabs = document.querySelectorAll("#myResFloorTabs .floor-tab");
+    tabs.forEach(function (t) {
+      t.classList.toggle("active", parseInt(t.dataset.floor, 10) === myResSelectedFloor);
+    });
+
+    renderMyReservationsTable(myRes);
+    renderMyReservationsMap(myRes);
+    document.getElementById("myReservationsOverlay").classList.add("open");
+  }
+
+  function closeMyReservations() {
+    var overlay = document.getElementById("myReservationsOverlay");
+    if (overlay) overlay.classList.remove("open");
+  }
+
+  function setupMyReservationsHandlers() {
+    var nameEl = document.getElementById("signedInName");
+    nameEl.addEventListener("click", openMyReservations);
+    nameEl.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        openMyReservations();
+      }
+    });
+
+    document.getElementById("myResClose").addEventListener("click", closeMyReservations);
+    document.getElementById("myResBackBtn").addEventListener("click", closeMyReservations);
+
+    document.getElementById("myReservationsOverlay").addEventListener("click", function (e) {
+      if (e.target.id === "myReservationsOverlay") closeMyReservations();
+    });
+
+    var tabs = document.querySelectorAll("#myResFloorTabs .floor-tab");
+    tabs.forEach(function (tab) {
+      tab.addEventListener("click", function () {
+        myResSelectedFloor = parseInt(tab.dataset.floor, 10);
+        tabs.forEach(function (t) {
+          t.classList.remove("active");
+        });
+        tab.classList.add("active");
+        renderMyReservationsMap(getMyUpcomingReservations());
+      });
+    });
+  }
+
+  // ---------------------------------------------------------------------
   // Live refresh
   // ---------------------------------------------------------------------
 
@@ -872,6 +1190,7 @@
   function init() {
     setupFloorTabs();
     setupModalHandlers();
+    setupMyReservationsHandlers();
     setupAuth();
     var scheduleDateEl = document.getElementById("scheduleDate");
     if (scheduleDateEl) scheduleDateEl.min = todayStr();

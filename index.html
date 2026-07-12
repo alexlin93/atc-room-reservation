@@ -21,7 +21,7 @@
     <div class="auth-area" id="authArea">
       <button type="button" id="googleSignInButton" class="btn-google-signin">Sign in with Google</button>
       <div class="signed-in-info" id="signedInInfo">
-        <span id="signedInName"></span>
+        <span id="signedInName" class="signed-in-name" tabindex="0" role="button" title="View my reservations"></span>
         <button type="button" id="signOutBtn" class="btn-link">Sign out</button>
       </div>
     </div>
@@ -88,6 +88,49 @@
       <div class="upcoming">
         <h3>Upcoming reservations</h3>
         <ul id="upcomingList" class="upcoming-list"></ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay myres-overlay" id="myReservationsOverlay">
+    <div class="modal myres-modal" role="dialog" aria-modal="true" aria-labelledby="myResTitle">
+      <button class="modal-close" id="myResClose" aria-label="Close">&times;</button>
+      <h2 id="myResTitle">My Reservations</h2>
+
+      <div class="myres-body">
+        <div class="myres-table-wrap">
+          <table class="myres-table">
+            <thead>
+              <tr>
+                <th>Floor</th>
+                <th>Room</th>
+                <th>Date</th>
+                <th>Time</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="myResTableBody"></tbody>
+          </table>
+          <div class="myres-empty" id="myResEmpty">You have no upcoming reservations.</div>
+        </div>
+
+        <div class="myres-maps">
+          <div class="myres-maps-tabs" id="myResFloorTabs">
+            <button type="button" class="floor-tab active" data-floor="3">Floor 3</button>
+            <button type="button" class="floor-tab" data-floor="4">Floor 4</button>
+          </div>
+          <div class="floor-title" id="myResFloorTitle"></div>
+          <div class="map-wrap">
+            <div class="map-canvas" id="myResMapCanvas"></div>
+          </div>
+          <div class="myres-map-legend">
+            <span class="legend-item"><span class="swatch mine"></span> Your reservation</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="myres-footer">
+        <button type="button" class="btn-link" id="myResBackBtn">← Back to map</button>
       </div>
     </div>
   </div>
