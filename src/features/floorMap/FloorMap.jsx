@@ -2,6 +2,8 @@ import { FLOORS } from "../../data/roomsData";
 import { currentReservation } from "../../utils/time";
 import ZoneBox from "./ZoneBox";
 import RoomBox from "./RoomBox";
+import BuildingOutline from "./BuildingOutline";
+import MapMarker from "./MapMarker";
 
 // Renders the zone/room boxes for a given floor. Shared by the main map
 // (pages/MainAppPage.jsx) and the My Reservations page's floor-plan visual
@@ -23,6 +25,8 @@ export default function FloorMap({ floor, reservations, now, onRoomClick, highli
       id={canvasId}
       style={{ aspectRatio: `${data.canvasWidth} / ${data.canvasHeight}` }}
     >
+      <BuildingOutline data={data} />
+
       {data.zones.map((zone, i) => (
         <ZoneBox key={`zone-${i}`} zone={zone} data={data} />
       ))}
@@ -41,6 +45,10 @@ export default function FloorMap({ floor, reservations, now, onRoomClick, highli
           />
         );
       })}
+
+      {(data.markers || []).map((marker, i) => (
+        <MapMarker key={`marker-${i}`} marker={marker} data={data} />
+      ))}
     </div>
   );
 }

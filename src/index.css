@@ -276,12 +276,34 @@ main {
   overflow: hidden;
 }
 
-/* Zones: non-reservable areas. Blueprint-style outline (light/near-
-   transparent fill, clear border) so these still read as part of the
-   floor plan's structure — hallways/tenant space/core — rather than
-   opaque paint, while staying visually distinct from bookable rooms. */
+/* Building outline: a subtle silhouette layer (notched stairwell corners +
+   one curved edge by the staff-suite wing — see utils/mapLayout.js's
+   buildOutlinePath()) sitting behind every zone/room, so the map reads as
+   an actual building footprint rather than a plain rectangle. Purely
+   decorative: absolutely positioned, full-bleed, non-interactive. */
+.building-outline {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.building-outline path {
+  fill: #fbfcfd;
+  stroke: var(--color-zone-border);
+  stroke-width: 3;
+}
+
+/* Zones: non-reservable areas. Default (no explicit `color`) keeps the
+   original blueprint-style outline (light/near-transparent fill, clear
+   border). Zones with a `color` (tenant/core/utility areas per the new
+   reference floor plans' color scheme) paint that background directly via
+   inline style instead — see ZoneBox.jsx. */
 .zone-box {
   position: absolute;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -295,6 +317,16 @@ main {
   overflow: hidden;
 }
 
+/* The kids-wing light-blue background band: a soft area tint behind a
+   cluster of normally-colored, individually clickable reservable rooms —
+   not a bordered/labeled zone in its own right, so no border and a lower
+   opacity fill. */
+.zone-box.zone-box-tint {
+  border: none;
+  border-radius: 10px;
+  opacity: 0.55;
+}
+
 .zone-label {
   font-size: 0.75rem;
   font-weight: 500;
@@ -305,9 +337,42 @@ main {
   border-radius: 3px;
 }
 
+/* ---------- Map markers ---------- */
+/* Small point icons (restrooms, elevators, water, first-aid, stairs, the
+   Lakeside Play Structure illustrative icon) — non-interactive, rendered on
+   top of zones/rooms so they stay visible, but pointer-events: none means
+   clicks always fall through to the room/zone underneath. */
+.map-marker {
+  position: absolute;
+  z-index: 3;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  line-height: 1;
+}
+
+.map-marker-icon {
+  font-size: 1.1rem;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35));
+}
+
+.map-marker-label {
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: var(--color-text);
+  background: rgba(255, 255, 255, 0.85);
+  padding: 0.05rem 0.3rem;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
 /* Rooms: reservable, clickable */
 .room-box {
   position: absolute;
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -324,7 +389,7 @@ main {
 .room-box:focus-visible {
   filter: brightness(0.96);
   box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.45);
-  z-index: 2;
+  z-index: 4;
   outline: none;
 }
 
