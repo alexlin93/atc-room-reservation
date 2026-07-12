@@ -3,11 +3,12 @@
   "use strict";
 
   var STORAGE_KEY = "atc-room-reservations";
-  var LAST_NAME_KEY = "atc-last-name";
+  var AUTH_STORAGE_KEY = "atc-current-user";
   var REFRESH_INTERVAL_MS = 30000;
 
   var currentFloor = 3;
   var currentModalRoom = null; // { floor, roomId }
+  var editingReservationId = null; // non-null while the reserve form is in "edit" mode
 
   // ---------------------------------------------------------------------
   // Storage helpers
@@ -40,6 +41,17 @@
     saveReservations(list);
   }
 
+  function updateReservationById(id, patch) {
+    var list = loadReservations();
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].id === id) {
+        list[i] = Object.assign({}, list[i], patch);
+        break;
+      }
+    }
+    saveReservations(list);
+  }
+
   function makeId() {
     return (
       "res_" +
@@ -64,6 +76,162 @@
       return startHour < existingEnd && r.startHour < proposedEnd;
     });
   }
+
+  // Building-wide "one room at a time" rule: does this user already have a
+  // different reservation (any floor/room) whose time range overlaps the
+  // requested one on the same date? Returns the conflicting reservation, or
+  // null. excludeId lets an in-progress edit ignore its own prior booking.
+  function hasCrossRoomConflict(email, date, startHour, durationHours, excludeId) {
+    var proposedEnd = startHour + durationHours;
+    var list = loadReservations();
+    for (var i = 0; i < list.length; i++) {
+      var r = list[i];
+      if (excludeId && r.id === excludeId) continue;
+      if (r.email !== email || r.date !== date) continue;
+      var existingEnd = r.startHour + r.durationHours;
+      if (startHour < existingEnd && r.startHour < proposedEnd) {
+        return r;
+      }
+    }
+    return null;
+  }
+
+  // ---------------------------------------------------------------------
+  // Auth (Google Identity Services)
+  // ---------------------------------------------------------------------
+
+  function getCurrentUser() {
+    try {
+      var raw = sessionStorage.getItem(AUTH_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function setCurrentUser(user) {
+    sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
+    refreshAuthUI();
+  }
+
+  function clearCurrentUser() {
+    sessionStorage.removeItem(AUTH_STORAGE_KEY);
+    refreshAuthUI();
+  }
+
+  // Decodes (but does NOT cryptographically verify) a Google Identity Services
+  // JWT payload. Real verification would require fetching Google's JWKS and
+  // checking the signature with Web Crypto — out of scope for this client-only
+  // POC. Acceptable for this POC's trust model; a real deployment needs a
+  // backend to verify the token before trusting its claims.
+  function decodeJwtPayload(token) {
+    try {
+      var parts = token.split(".");
+      if (parts.length < 2) return null;
+      var base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+      while (base64.length % 4) base64 += "=";
+      var json = decodeURIComponent(
+        atob(base64)
+          .split("")
+          .map(function (c) {
+            return "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2);
+          })
+          .join("")
+      );
+      return JSON.parse(json);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function handleCredentialResponse(response) {
+    var payload = decodeJwtPayload(response && response.credential);
+    if (!payload || !payload.email) return;
+    setCurrentUser({ email: payload.email, name: payload.name || payload.email });
+  }
+
+  function tryInitGoogleSignIn() {
+    if (!window.google || !google.accounts || !google.accounts.id) return false;
+    try {
+      google.accounts.id.initialize({
+        client_id: typeof GOOGLE_CLIENT_ID !== "undefined" ? GOOGLE_CLIENT_ID : "",
+        callback: handleCredentialResponse,
+      });
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function tryRenderGoogleButton() {
+    var container = document.getElementById("googleSignInButton");
+    if (!container) return;
+    container.innerHTML = "";
+    if (!window.google || !google.accounts || !google.accounts.id) return;
+    try {
+      google.accounts.id.renderButton(container, { theme: "outline", size: "medium" });
+    } catch (e) {
+      // GIS unavailable (no real Client ID / no network path to Google in this
+      // environment) — expected in dev/test; the rest of the page still works.
+    }
+  }
+
+  function renderAuthArea() {
+    var user = getCurrentUser();
+    var btnContainer = document.getElementById("googleSignInButton");
+    var infoEl = document.getElementById("signedInInfo");
+    var nameEl = document.getElementById("signedInName");
+
+    if (user) {
+      if (btnContainer) btnContainer.style.display = "none";
+      if (infoEl) infoEl.style.display = "flex";
+      if (nameEl) nameEl.textContent = (user.name ? user.name + " " : "") + "(" + user.email + ")";
+    } else {
+      if (infoEl) infoEl.style.display = "none";
+      if (btnContainer) btnContainer.style.display = "";
+      tryRenderGoogleButton();
+    }
+  }
+
+  // Re-renders everything whose content depends on who is currently signed in.
+  function refreshAuthUI() {
+    renderAuthArea();
+    if (currentModalRoom) {
+      exitEditMode();
+      updateReserveFormVisibility();
+      renderUpcomingList();
+    }
+  }
+
+  // TEST-ONLY HOOK: lets automated tests (and manual debugging) sign in as a
+  // fake identity without going through real Google OAuth, since headless
+  // browsers can't complete Google's sign-in flow and no real Client ID is
+  // configured yet. Not wired to any visible UI control.
+  window.__setTestUser = function (email, name) {
+    setCurrentUser({ email: String(email), name: name ? String(name) : String(email) });
+  };
+
+  // Same test-only escape hatch, reachable via a query string for convenience
+  // in scripted/headless runs, e.g. ?testUser=a@example.com&testName=Alice
+  function applyTestUserFromQuery() {
+    try {
+      var params = new URLSearchParams(window.location.search);
+      var email = params.get("testUser");
+      if (email) {
+        window.__setTestUser(email, params.get("testName") || email);
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  // Invoked by the GIS <script onload> in index.html once the real Google
+  // script has finished loading (it's loaded async, so it may arrive after
+  // this file has already run its initial setup).
+  window.__gisLoaded = function () {
+    tryInitGoogleSignIn();
+    renderAuthArea();
+  };
 
   // ---------------------------------------------------------------------
   // Date / time helpers
@@ -208,16 +376,15 @@
 
   function openModal(floor, roomId) {
     currentModalRoom = { floor: floor, roomId: roomId };
+    exitEditMode();
 
     document.getElementById("modalTitle").textContent = roomId;
     document.getElementById("scheduleDate").value = todayStr();
     document.getElementById("formError").textContent = "";
-
-    var lastName = localStorage.getItem(LAST_NAME_KEY) || "";
-    document.getElementById("reserveName").value = lastName;
     document.getElementById("reserveDuration").value = "1";
 
     populateReserveStartOptions();
+    updateReserveFormVisibility();
     renderModalStatus();
     renderDayGrid();
     renderUpcomingList();
@@ -228,6 +395,45 @@
   function closeModal() {
     document.getElementById("modalOverlay").classList.remove("open");
     currentModalRoom = null;
+    exitEditMode();
+  }
+
+  // Shows the reservation form (with a "Reserving as ..." line) when someone
+  // is signed in, or a sign-in prompt in its place when nobody is.
+  function updateReserveFormVisibility() {
+    var user = getCurrentUser();
+    var form = document.getElementById("reserveForm");
+    var prompt = document.getElementById("signInPrompt");
+    var reservingAsText = document.getElementById("reservingAsText");
+
+    if (user) {
+      form.classList.remove("hidden");
+      prompt.classList.add("hidden");
+      reservingAsText.textContent = "Reserving as: " + (user.name ? user.name + " " : "") + "(" + user.email + ")";
+    } else {
+      form.classList.add("hidden");
+      prompt.classList.remove("hidden");
+    }
+  }
+
+  function enterEditMode(r) {
+    editingReservationId = r.id;
+    document.getElementById("scheduleDate").value = r.date;
+    document.getElementById("reserveDuration").value = String(r.durationHours);
+    populateReserveStartOptions();
+    document.getElementById("reserveStart").value = String(r.startHour);
+    document.getElementById("reserveSubmitBtn").textContent = "Save changes";
+    document.getElementById("cancelEditBtn").style.display = "";
+    document.getElementById("formError").textContent = "";
+    renderDayGrid();
+  }
+
+  function exitEditMode() {
+    editingReservationId = null;
+    var submitBtn = document.getElementById("reserveSubmitBtn");
+    var cancelBtn = document.getElementById("cancelEditBtn");
+    if (submitBtn) submitBtn.textContent = "Reserve room";
+    if (cancelBtn) cancelBtn.style.display = "none";
   }
 
   function renderModalStatus() {
@@ -300,7 +506,7 @@
         });
 
         if (res) {
-          statusCell.textContent = res.name;
+          statusCell.textContent = "Reserved by " + res.name;
           statusCell.classList.add("booked");
         } else {
           statusCell.textContent = "Free";
@@ -318,7 +524,6 @@
               populateReserveStartOptions();
             }
             startSelect.value = String(hour);
-            document.getElementById("reserveName").focus();
           });
         }
 
@@ -354,28 +559,50 @@
       return;
     }
 
+    var user = getCurrentUser();
+
     upcoming.forEach(function (r) {
       var li = document.createElement("li");
       li.className = "upcoming-item";
 
       var info = document.createElement("span");
-      info.textContent = r.date + " · " + timeRangeLabel(r.startHour, r.durationHours) + " · " + r.name;
+      info.textContent = r.date + " · " + timeRangeLabel(r.startHour, r.durationHours) + " · Reserved by " + r.name;
       li.appendChild(info);
 
-      var btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "btn-cancel";
-      btn.textContent = "Cancel";
-      btn.addEventListener("click", function () {
-        if (window.confirm("Cancel this reservation for " + roomId + " on " + r.date + "?")) {
-          cancelReservationById(r.id);
-          renderDayGrid();
-          renderUpcomingList();
-          renderModalStatus();
-          updateOccupancy(currentFloor);
-        }
-      });
-      li.appendChild(btn);
+      // Other people's bookings stay visible (so everyone can see the room is
+      // taken) but are read-only — only the reservation's own signed-in owner
+      // (matched by verified email) gets Edit/Cancel controls.
+      if (user && user.email === r.email) {
+        var actions = document.createElement("span");
+        actions.className = "upcoming-actions";
+
+        var editBtn = document.createElement("button");
+        editBtn.type = "button";
+        editBtn.className = "btn-edit";
+        editBtn.textContent = "Edit";
+        editBtn.addEventListener("click", function () {
+          enterEditMode(r);
+        });
+        actions.appendChild(editBtn);
+
+        var btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "btn-cancel";
+        btn.textContent = "Cancel";
+        btn.addEventListener("click", function () {
+          if (window.confirm("Cancel this reservation for " + roomId + " on " + r.date + "?")) {
+            if (editingReservationId === r.id) exitEditMode();
+            cancelReservationById(r.id);
+            renderDayGrid();
+            renderUpcomingList();
+            renderModalStatus();
+            updateOccupancy(currentFloor);
+          }
+        });
+        actions.appendChild(btn);
+
+        li.appendChild(actions);
+      }
 
       list.appendChild(li);
     });
@@ -390,10 +617,9 @@
     var errorEl = document.getElementById("formError");
     errorEl.textContent = "";
 
-    var nameInput = document.getElementById("reserveName");
-    var name = nameInput.value.trim();
-    if (!name) {
-      errorEl.textContent = "Please enter your name.";
+    var user = getCurrentUser();
+    if (!user) {
+      errorEl.textContent = "Please sign in with Google (top of page) to reserve this room.";
       return;
     }
 
@@ -411,27 +637,45 @@
       return;
     }
 
-    if (hasConflict(floor, roomId, date, startHour, duration)) {
+    if (hasConflict(floor, roomId, date, startHour, duration, editingReservationId)) {
       errorEl.textContent = "That time conflicts with an existing reservation for this room. Please choose another time.";
       return;
     }
 
-    addReservation({
-      id: makeId(),
-      floor: floor,
-      roomId: roomId,
-      date: date,
-      startHour: startHour,
-      durationHours: duration,
-      name: name,
-    });
+    var crossConflict = hasCrossRoomConflict(user.email, date, startHour, duration, editingReservationId);
+    if (crossConflict) {
+      errorEl.textContent =
+        "You already have " + crossConflict.roomId + " booked " +
+        timeRangeLabel(crossConflict.startHour, crossConflict.durationHours) +
+        " that day, which overlaps this request.";
+      return;
+    }
 
-    localStorage.setItem(LAST_NAME_KEY, name);
+    if (editingReservationId) {
+      updateReservationById(editingReservationId, {
+        date: date,
+        startHour: startHour,
+        durationHours: duration,
+        email: user.email,
+        name: user.name,
+      });
+    } else {
+      addReservation({
+        id: makeId(),
+        floor: floor,
+        roomId: roomId,
+        date: date,
+        startHour: startHour,
+        durationHours: duration,
+        email: user.email,
+        name: user.name,
+      });
+    }
 
+    exitEditMode();
     errorEl.textContent = "";
     document.getElementById("reserveDuration").value = "1";
     populateReserveStartOptions();
-    nameInput.value = name; // keep last-used name prefilled
 
     renderDayGrid();
     renderUpcomingList();
@@ -462,6 +706,22 @@
     });
 
     document.getElementById("reserveForm").addEventListener("submit", handleReserveSubmit);
+
+    document.getElementById("cancelEditBtn").addEventListener("click", function () {
+      exitEditMode();
+      document.getElementById("formError").textContent = "";
+    });
+
+    document.getElementById("signOutBtn").addEventListener("click", function () {
+      clearCurrentUser();
+      if (window.google && google.accounts && google.accounts.id) {
+        try {
+          google.accounts.id.disableAutoSelect();
+        } catch (e) {
+          // ignore — GIS may not be loaded in this environment
+        }
+      }
+    });
   }
 
   // ---------------------------------------------------------------------
@@ -483,6 +743,9 @@
     setupFloorTabs();
     setupModalHandlers();
     renderFloor(currentFloor);
+    tryInitGoogleSignIn();
+    renderAuthArea();
+    applyTestUserFromQuery();
     setInterval(tick, REFRESH_INTERVAL_MS);
   }
 

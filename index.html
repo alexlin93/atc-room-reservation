@@ -18,6 +18,13 @@
       <span class="legend-item"><span class="swatch occupied"></span> Reserved now</span>
       <span class="legend-item"><span class="swatch na"></span> Not reservable</span>
     </div>
+    <div class="auth-area" id="authArea">
+      <div id="googleSignInButton"></div>
+      <div class="signed-in-info" id="signedInInfo">
+        <span id="signedInName"></span>
+        <button type="button" id="signOutBtn" class="btn-link">Sign out</button>
+      </div>
+    </div>
   </header>
 
   <main>
@@ -43,10 +50,8 @@
 
       <form class="reserve-form" id="reserveForm">
         <h3>Reserve this room</h3>
-        <div class="form-row">
-          <label>Your name
-            <input type="text" id="reserveName" required maxlength="60" placeholder="e.g. Alex Lin" />
-          </label>
+        <div class="form-row reserving-as-row">
+          <span id="reservingAsText"></span>
         </div>
         <div class="form-row">
           <label>Start time
@@ -62,8 +67,15 @@
           </label>
         </div>
         <div class="form-error" id="formError"></div>
-        <button type="submit" class="btn-reserve">Reserve room</button>
+        <div class="form-actions">
+          <button type="submit" class="btn-reserve" id="reserveSubmitBtn">Reserve room</button>
+          <button type="button" class="btn-link" id="cancelEditBtn" style="display: none;">Cancel edit</button>
+        </div>
       </form>
+
+      <div class="sign-in-prompt" id="signInPrompt">
+        Sign in with Google (top of page) to reserve this room.
+      </div>
 
       <div class="upcoming">
         <h3>Upcoming reservations</h3>
@@ -72,6 +84,8 @@
     </div>
   </div>
 
+  <script src="config.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer onload="window.__gisLoaded && window.__gisLoaded()"></script>
   <script src="rooms-data.js"></script>
   <script src="app.js"></script>
 </body>
