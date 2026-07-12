@@ -159,7 +159,38 @@ create policy "Admins can update room overrides" on room_overrides for update
 -- in place above — so `admins` already exists by the time these are
 -- (re)created (CREATE POLICY validates the query, including the `admins`
 -- reference, at creation time).
+--
+-- The insert/update policies are ALSO re-created here (not just
+-- update/delete) to add a second condition: the target room (the NEW row's
+-- floor/room_id) must not be marked unreservable in `room_overrides`,
+-- unless the caller is an admin. This is what actually stops a non-admin
+-- from booking a disabled room by calling the API directly — the map's
+-- greyed-out styling and the client's submit-time check
+-- (RoomModal.jsx) are UX, this is the real backstop, same as every other
+-- rule in this file. `not exists (... is_reservable = false)` means a room
+-- with NO row in room_overrides at all (the common case — only rooms an
+-- admin has actually toggled ever get a row) still passes, i.e. defaults to
+-- reservable; only an explicit `is_reservable = false` row blocks it. This
+-- needs to be re-created down here (not left as the original policy
+-- earlier in this file) so `room_overrides` and `admins` already exist by
+-- the time it's (re)created.
 -- ---------------------------------------------------------------------
+drop policy if exists "Users can create their own reservations" on reservations;
+create policy "Users can create their own reservations"
+  on reservations for insert
+  with check (
+    email = auth.jwt() ->> 'email'
+    and (
+      not exists (
+        select 1 from room_overrides ro
+        where ro.floor = reservations.floor
+          and ro.room_id = reservations.room_id
+          and ro.is_reservable = false
+      )
+      or exists (select 1 from admins where admins.email = auth.jwt() ->> 'email')
+    )
+  );
+
 drop policy if exists "Users can update their own reservations" on reservations;
 create policy "Users can update their own reservations"
   on reservations for update
@@ -168,8 +199,24 @@ create policy "Users can update their own reservations"
     or exists (select 1 from admins where admins.email = auth.jwt() ->> 'email')
   )
   with check (
-    email = auth.jwt() ->> 'email'
-    or exists (select 1 from admins where admins.email = auth.jwt() ->> 'email')
+    (
+      email = auth.jwt() ->> 'email'
+      or exists (select 1 from admins where admins.email = auth.jwt() ->> 'email')
+    )
+    and (
+      -- Blocks a non-admin from editing a reservation so its new
+      -- floor/room_id lands in a room that's since been marked
+      -- unreservable (e.g. changing rooms, or re-saving after an admin
+      -- disabled the room mid-edit) — same room-reservable rule as insert
+      -- above, just evaluated against the row's post-edit values.
+      not exists (
+        select 1 from room_overrides ro
+        where ro.floor = reservations.floor
+          and ro.room_id = reservations.room_id
+          and ro.is_reservable = false
+      )
+      or exists (select 1 from admins where admins.email = auth.jwt() ->> 'email')
+    )
   );
 
 drop policy if exists "Users can delete their own reservations" on reservations;
@@ -186,12 +233,44 @@ create policy "Users can delete their own reservations"
 -- either EXCLUDE constraint (same-room double-booking, or the "one room at
 -- a time" cross-room rule) — those apply to everyone, admins included. This
 -- is the one CHECK the user specifically asked admins be able to skip
--- ("create a reservation without the time restriction"), so only this
--- constraint is touched.
+-- ("create a reservation without the time restriction"), so only this rule
+-- is touched.
+--
+-- IMPORTANT: this can no longer be a CHECK constraint. Verified against a
+-- real local Postgres 16 instance: CHECK constraints cannot contain
+-- subqueries at all ("ERROR: cannot use subquery in check constraint"), so
+-- looking up `admins` — needed for the bypass — is simply not expressible
+-- as a CHECK, no matter how it's phrased. (This means the version of this
+-- constraint from the earlier commit, `check (starts_at >= now() -
+-- interval '5 minutes' or exists (select 1 from admins ...))`, could never
+-- actually have been applied to a real Postgres database — this replaces
+-- it with an equivalent BEFORE trigger, which — unlike a CHECK constraint —
+-- can run arbitrary queries.) The trigger raises SQLSTATE 23514
+-- (check_violation), the same class of error a CHECK constraint would have
+-- raised, so it still reads as a constraint violation to callers/clients.
 -- ---------------------------------------------------------------------
 alter table reservations drop constraint if exists starts_not_in_past;
-alter table reservations
-  add constraint starts_not_in_past check (
-    starts_at >= now() - interval '5 minutes'
-    or exists (select 1 from admins where admins.email = auth.jwt() ->> 'email')
-  );
+
+create or replace function reservations_check_starts_not_in_past()
+returns trigger as $$
+begin
+  if new.starts_at < now() - interval '5 minutes'
+     and not exists (select 1 from admins where admins.email = auth.jwt() ->> 'email')
+  then
+    raise exception 'new row for relation "reservations" violates check constraint "starts_not_in_past"'
+      using errcode = '23514';
+  end if;
+  return new;
+end;
+$$ language plpgsql;
+
+-- Deliberately named to sort alphabetically after
+-- reservations_set_range_trigger ("...s_set_range..." < "...s_starts_not...",
+-- 'e' < 't'): Postgres fires same-event BEFORE ROW triggers on one table in
+-- alphabetical order by trigger name, and this must run second so it checks
+-- the starts_at that reservations_set_range_trigger has already derived
+-- from reservation_date/start_hour, not a stale/absent value.
+drop trigger if exists reservations_starts_not_in_past_trigger on reservations;
+create trigger reservations_starts_not_in_past_trigger
+  before insert or update on reservations
+  for each row execute function reservations_check_starts_not_in_past();

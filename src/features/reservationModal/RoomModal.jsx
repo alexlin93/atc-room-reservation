@@ -162,9 +162,12 @@ export default function RoomModal({
     // itself is live — isRoomReservable reads from useRoomOverrides, which is
     // kept current via realtime/poll — so this reflects the latest known
     // status as of this click, not just whatever it was when the modal opened.
-    // Known limitation: this is a client-side/UI check only (see schema.sql —
-    // room_overrides has no linkage into the reservations table's own RLS/CHECK),
-    // so it doesn't stop a non-admin from calling the Supabase insert directly.
+    // This is a UX nicety, not the real backstop: the reservations table's
+    // own INSERT/UPDATE policies (supabase/schema.sql) independently require
+    // the target room to be reservable-or-caller-is-admin, so a non-admin
+    // calling the Supabase insert/update directly (bypassing this check
+    // entirely) is still rejected server-side — verified against a real
+    // Postgres instance, see supabase/schema.sql's comments.
     if (!roomReservable && !isAdmin) {
       setFormError("This room has been marked unreservable by an admin.");
       return;
