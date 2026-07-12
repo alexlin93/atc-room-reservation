@@ -43,11 +43,25 @@ create index if not exists reservations_email_date_idx
 -- starts_at/ends_at are always derived server-side from
 -- reservation_date/start_hour/duration_hours, so a client can't send a
 -- mismatched range while the exclusion constraints check something else.
+--
+-- The building (Elgin Campus) is a single physical location in the
+-- America/Chicago timezone, so reservation_date/start_hour represent
+-- wall-clock hours *at the building*, not in whatever timezone the
+-- browser or DB session happens to be in. `date + interval` produces a
+-- plain (zone-less) timestamp; assigning that straight into a timestamptz
+-- column implicitly interprets it using the session's `timezone` GUC
+-- (UTC on Supabase), silently shifting every reservation by several
+-- hours. Instead, explicitly interpret the naive timestamp as wall-clock
+-- time `at time zone 'America/Chicago'`, which converts it to the correct
+-- UTC instant regardless of the session's timezone setting. This zone is
+-- intentionally hardcoded (not derived from the client) because the room
+-- only exists in one place — a visitor browsing from another timezone
+-- must still have "2pm" mean 2pm Chicago time.
 create or replace function reservations_set_range()
 returns trigger as $$
 begin
-  new.starts_at := new.reservation_date + make_interval(hours => new.start_hour);
-  new.ends_at := new.reservation_date + make_interval(hours => new.start_hour + new.duration_hours);
+  new.starts_at := (new.reservation_date + make_interval(hours => new.start_hour)) at time zone 'America/Chicago';
+  new.ends_at := (new.reservation_date + make_interval(hours => new.start_hour + new.duration_hours)) at time zone 'America/Chicago';
   return new;
 end;
 $$ language plpgsql;
@@ -81,21 +95,26 @@ create policy "Users can delete their own reservations"
   using (email = auth.jwt() ->> 'email');
 
 -- ---------------------------------------------------------------------
--- Guard: reject reservations whose derived start time is already in the
--- past — enforced by Postgres itself so it holds even if a client bypasses
--- the app's own UI (which hides/rejects past dates and hours). Evaluated
--- against starts_at, which the reservations_set_range_trigger above always
--- derives from reservation_date/start_hour before this CHECK runs (BEFORE
--- ROW triggers modify NEW before constraints are checked), so a client
--- can't send a stale/mismatched starts_at to dodge this. A small 5-minute
--- grace window avoids rejecting a booking made for "right now" that takes
--- a moment to submit. Safe to re-run: only adds the constraint if it
--- doesn't already exist.
+-- Guard: reject reservations whose entire slot has already fully elapsed
+-- — enforced by Postgres itself so it holds even if a client bypasses the
+-- app's own UI (which hides/rejects past dates and hours). Evaluated
+-- against ends_at (not starts_at), which the reservations_set_range_trigger
+-- above always derives from reservation_date/start_hour/duration_hours
+-- before this CHECK runs (BEFORE ROW triggers modify NEW before
+-- constraints are checked), so a client can't send a stale/mismatched
+-- ends_at to dodge this. Checking ends_at rather than starts_at means the
+-- whole current, in-progress hour slot stays bookable — e.g. at 2:30pm a
+-- "2:00pm-3:00pm" booking is still allowed, since it hasn't elapsed yet;
+-- only a slot whose end time has already passed is rejected. A small
+-- 5-minute grace period further avoids rejecting a booking made right at
+-- the boundary that takes a moment to submit.
+--
+-- Safe to re-run on both a fresh database (constraint never existed) and
+-- an already-migrated one (old starts_at-based constraint already
+-- exists): drop the old constraint by name if present, then re-add the
+-- current definition, so re-running this whole file is always safe.
 -- ---------------------------------------------------------------------
-do $$
-begin
-  if not exists (select 1 from pg_constraint where conname = 'starts_not_in_past') then
-    alter table reservations
-      add constraint starts_not_in_past check (starts_at >= now() - interval '5 minutes');
-  end if;
-end $$;
+alter table reservations drop constraint if exists starts_not_in_past;
+
+alter table reservations
+  add constraint starts_not_in_past check (ends_at > now() - interval '5 minutes');
