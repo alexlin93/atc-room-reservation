@@ -3,17 +3,17 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Elgin Campus Room Reservations</title>
+<title>ATC Room Reservations</title>
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <header class="app-header">
-    <h1>Elgin Campus &mdash; Building A</h1>
+    <h1>ATC Room Reservations</h1>
     <div class="floor-tabs" id="floorTabs">
       <button class="floor-tab active" data-floor="3">Floor 3</button>
       <button class="floor-tab" data-floor="4">Floor 4</button>
     </div>
-    <div class="legend">
+    <div class="legend" id="legend">
       <span class="legend-item"><span class="swatch free"></span> Free</span>
       <span class="legend-item"><span class="swatch occupied"></span> Reserved now</span>
       <span class="legend-item"><span class="swatch na"></span> Not reservable</span>
@@ -27,7 +27,15 @@
     </div>
   </header>
 
-  <main>
+  <div class="welcome-screen" id="welcomeScreen">
+    <div class="welcome-card">
+      <h1>ATC Room Reservations</h1>
+      <p>Sign in with your Google account to view the floor plan and reserve a room.</p>
+      <button type="button" id="welcomeSignInButton" class="btn-google-signin btn-google-signin-large">Sign in with Google</button>
+    </div>
+  </div>
+
+  <main id="mainApp">
     <div class="floor-title" id="floorTitle"></div>
     <div class="map-wrap">
       <div class="map-canvas" id="mapCanvas"></div>

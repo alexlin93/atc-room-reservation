@@ -17,6 +17,8 @@
   --color-occupied-border: #f0a3a3;
   --color-na-bg: #e4e7eb;
   --color-na-border: #cbd1d8;
+  --color-zone-bg: rgba(100, 116, 139, 0.05);
+  --color-zone-border: #94a3b8;
   --radius: 8px;
   --shadow-modal: 0 12px 40px rgba(15, 23, 42, 0.25);
 }
@@ -171,6 +173,58 @@ body {
   background: var(--color-free-bg);
 }
 
+/* ---------- Gating (signed-out vs signed-in) ---------- */
+/* Default assumes signed-out (the safe starting state) until app.js's
+   auth check confirms a real session, then flips these via inline
+   style.display in updateAppGate(). */
+
+#mainApp,
+#floorTabs,
+#legend {
+  display: none;
+}
+
+.welcome-screen {
+  display: flex;
+}
+
+/* ---------- Welcome / sign-in gate screen ---------- */
+
+.welcome-screen {
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - 70px);
+  padding: 2rem 1.5rem;
+}
+
+.welcome-card {
+  max-width: 420px;
+  text-align: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 2.5rem 2rem;
+  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.08);
+}
+
+.welcome-card h1 {
+  font-size: 1.4rem;
+  font-weight: 700;
+  margin: 0 0 0.75rem;
+}
+
+.welcome-card p {
+  font-size: 0.95rem;
+  color: var(--color-text-muted);
+  margin: 0 0 1.5rem;
+  line-height: 1.5;
+}
+
+.btn-google-signin-large {
+  padding: 0.65rem 1.5rem;
+  font-size: 0.95rem;
+}
+
 /* ---------- Main / floor map ---------- */
 
 main {
@@ -203,14 +257,17 @@ main {
   overflow: hidden;
 }
 
-/* Zones: non-reservable areas */
+/* Zones: non-reservable areas. Blueprint-style outline (light/near-
+   transparent fill, clear border) so these still read as part of the
+   floor plan's structure — hallways/tenant space/core — rather than
+   opaque paint, while staying visually distinct from bookable rooms. */
 .zone-box {
   position: absolute;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-na-bg);
-  border: 1px solid var(--color-na-border);
+  background: var(--color-zone-bg);
+  border: 1.5px solid var(--color-zone-border);
   color: var(--color-text-muted);
   cursor: default;
   border-radius: 4px;
@@ -224,6 +281,9 @@ main {
   font-weight: 500;
   line-height: 1.2;
   pointer-events: none;
+  background: rgba(255, 255, 255, 0.65);
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
 }
 
 /* Rooms: reservable, clickable */
@@ -269,6 +329,18 @@ main {
   line-height: 1.15;
   pointer-events: none;
   color: var(--color-text);
+  max-width: 100%;
+  max-height: 100%;
+}
+
+/* Applied (via app.js) to boxes whose height is meaningfully greater than
+   their width, so the room number reads top-to-bottom instead of being
+   clipped/overlapping in too-narrow a column. */
+.room-label.room-label-vertical {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  transform: rotate(180deg);
+  white-space: nowrap;
 }
 
 /* ---------- Modal ---------- */

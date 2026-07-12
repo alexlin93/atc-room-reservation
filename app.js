@@ -199,9 +199,39 @@
     }
   }
 
+  // Gates the whole app (floor tabs, legend, map — everything in <main>)
+  // behind sign-in. The header itself (app name + auth controls) always
+  // stays visible; only the welcome screen or the app body is shown at a
+  // time. Defaults to "signed out" (see the matching CSS defaults) so
+  // there's no flash of the map before the auth check resolves.
+  function updateAppGate() {
+    var user = getCurrentUser();
+    var welcome = document.getElementById("welcomeScreen");
+    var mainApp = document.getElementById("mainApp");
+    var floorTabs = document.getElementById("floorTabs");
+    var legend = document.getElementById("legend");
+
+    // Explicit display values, not "" (clearing an inline style would just
+    // fall back to the #id CSS rules above — which default to none, and an
+    // id selector's specificity beats the .floor-tabs/.legend class rules
+    // that would otherwise show them again).
+    if (user) {
+      if (welcome) welcome.style.display = "none";
+      if (mainApp) mainApp.style.display = "block";
+      if (floorTabs) floorTabs.style.display = "flex";
+      if (legend) legend.style.display = "flex";
+    } else {
+      if (welcome) welcome.style.display = "flex";
+      if (mainApp) mainApp.style.display = "none";
+      if (floorTabs) floorTabs.style.display = "none";
+      if (legend) legend.style.display = "none";
+    }
+  }
+
   // Re-renders everything whose content depends on who is currently signed in.
   function refreshAuthUI() {
     renderAuthArea();
+    updateAppGate();
     if (currentModalRoom) {
       exitEditMode();
       updateReserveFormVisibility();
@@ -239,6 +269,24 @@
     return formatDateLocal(new Date());
   }
 
+  // The earliest hour that's still bookable/viewable for a given date: the
+  // full OPEN_HOUR..CLOSE_HOUR-1 range for any future date, but for today
+  // only the current (still in-progress) hour onward — anything earlier
+  // has already fully elapsed.
+  function earliestRelevantHour(date) {
+    if (date !== todayStr()) return OPEN_HOUR;
+    return Math.max(OPEN_HOUR, new Date().getHours());
+  }
+
+  // A reservation is still "upcoming" (worth showing in the upcoming list)
+  // if it's on a future date, or on today and its end time hasn't passed yet.
+  function isReservationUpcoming(r) {
+    var today = todayStr();
+    if (r.date > today) return true;
+    if (r.date < today) return false;
+    return new Date().getHours() < r.startHour + r.durationHours;
+  }
+
   function hourLabel(h) {
     var period = h >= 12 ? "PM" : "AM";
     var hh = h % 12;
@@ -274,6 +322,41 @@
     el.style.top = (rect.y / data.canvasHeight) * 100 + "%";
     el.style.width = (rect.w / data.canvasWidth) * 100 + "%";
     el.style.height = (rect.h / data.canvasHeight) * 100 + "%";
+  }
+
+  // The map is laid out with percentage-based positioning so it scales
+  // with the container's actual rendered width — which isn't reliably
+  // knowable at render time (e.g. the app may currently be gated/hidden
+  // behind sign-in, giving every element a 0px layout box). So label
+  // sizing/orientation is derived purely from each room's own w/h "map
+  // units" (consistent within a floor), approximated against the map's
+  // typical rendered width (bounded by main's max-width and padding).
+  var APPROX_RENDERED_CANVAS_PX_WIDTH = 1240;
+
+  function computeRoomLabelStyle(room, data) {
+    var scale = APPROX_RENDERED_CANVAS_PX_WIDTH / data.canvasWidth;
+    var wPx = room.w * scale;
+    var hPx = room.h * scale;
+    var isVertical = room.h > room.w * 1.3;
+    var minDim = Math.min(wPx, hPx);
+
+    var fontPx;
+    if (minDim < 25) fontPx = 8;
+    else if (minDim < 35) fontPx = 9;
+    else if (minDim < 55) fontPx = 10.5;
+    else fontPx = 11.5;
+
+    // Shrink further if the id text is still too long to fit along the
+    // axis it reads along (vertical labels read along the box's height;
+    // horizontal labels read along its width).
+    var textLen = String(room.id).length;
+    var lengthAxisPx = (isVertical ? hPx : wPx) - 6; // minus box padding
+    var pxPerChar = fontPx * 0.62; // rough average glyph advance
+    if (textLen * pxPerChar > lengthAxisPx && lengthAxisPx > 0) {
+      fontPx = Math.max(6.5, lengthAxisPx / (textLen * 0.62));
+    }
+
+    return { isVertical: isVertical, fontPx: Math.round(fontPx * 10) / 10 };
   }
 
   function renderFloor(floor) {
@@ -314,6 +397,9 @@
       var label = document.createElement("span");
       label.className = "room-label";
       label.textContent = room.id;
+      var labelStyle = computeRoomLabelStyle(room, data);
+      if (labelStyle.isVertical) label.classList.add("room-label-vertical");
+      label.style.fontSize = labelStyle.fontPx + "px";
       el.appendChild(label);
 
       el.addEventListener("click", function () {
@@ -370,7 +456,9 @@
     exitEditMode();
 
     document.getElementById("modalTitle").textContent = roomId;
-    document.getElementById("scheduleDate").value = todayStr();
+    var scheduleDateEl = document.getElementById("scheduleDate");
+    scheduleDateEl.min = todayStr();
+    scheduleDateEl.value = todayStr();
     document.getElementById("formError").textContent = "";
     document.getElementById("reserveDuration").value = "1";
 
@@ -444,16 +532,19 @@
   }
 
   // Populate #reserveStart with bookable hours, respecting the currently
-  // selected duration so a start time can't push past CLOSE_HOUR.
+  // selected duration so a start time can't push past CLOSE_HOUR, and (for
+  // today's date) excluding hours that have already started/passed.
   function populateReserveStartOptions() {
     var durationSelect = document.getElementById("reserveDuration");
     var duration = parseInt(durationSelect.value, 10) || 1;
     var startSelect = document.getElementById("reserveStart");
     var prevValue = startSelect.value;
+    var date = document.getElementById("scheduleDate").value || todayStr();
 
     startSelect.innerHTML = "";
     var maxStart = CLOSE_HOUR - duration;
-    for (var h = OPEN_HOUR; h <= maxStart; h++) {
+    var minStart = earliestRelevantHour(date);
+    for (var h = minStart; h <= maxStart; h++) {
       var opt = document.createElement("option");
       opt.value = String(h);
       opt.textContent = hourLabel(h);
@@ -479,7 +570,8 @@
 
     var reservations = getReservationsFor(floor, roomId, date);
 
-    for (var h = OPEN_HOUR; h < CLOSE_HOUR; h++) {
+    var minHour = earliestRelevantHour(date);
+    for (var h = minHour; h < CLOSE_HOUR; h++) {
       (function (hour) {
         var row = document.createElement("div");
         row.className = "day-grid-row";
@@ -535,7 +627,7 @@
 
     var upcoming = reservationsCache
       .filter(function (r) {
-        return r.floor === floor && r.roomId === roomId && r.date >= today;
+        return r.floor === floor && r.roomId === roomId && r.date >= today && isReservationUpcoming(r);
       })
       .sort(function (a, b) {
         if (a.date !== b.date) return a.date < b.date ? -1 : 1;
@@ -633,6 +725,21 @@
       return;
     }
 
+    // Defensive re-check: the date input's `min` and the start-time
+    // select's options already keep the UI from offering a past date/time,
+    // but guard here too in case either was bypassed. The database's own
+    // starts_not_in_past constraint (supabase/schema.sql) is the real
+    // backstop that can't be bypassed at all.
+    var today = todayStr();
+    if (date < today) {
+      errorEl.textContent = "You can't reserve a date in the past.";
+      return;
+    }
+    if (date === today && startHour < new Date().getHours()) {
+      errorEl.textContent = "That start time has already passed today.";
+      return;
+    }
+
     // Fast client-side pre-checks, for a specific error message naming the
     // conflicting room/time. These are just a UX nicety — the database's own
     // EXCLUDE constraints are the real backstop (see the .catch-equivalent
@@ -713,6 +820,14 @@
     });
 
     document.getElementById("scheduleDate").addEventListener("change", function () {
+      var dateEl = document.getElementById("scheduleDate");
+      var today = todayStr();
+      // Defensive clamp: the `min` attribute stops the date picker UI from
+      // navigating to a past date, but a value could still be set another
+      // way (typed directly, autofill, devtools), so reject that here too.
+      if (dateEl.value && dateEl.value < today) {
+        dateEl.value = today;
+      }
       populateReserveStartOptions();
       renderDayGrid();
     });
@@ -730,6 +845,9 @@
 
     document.getElementById("googleSignInButton").addEventListener("click", signIn);
     document.getElementById("signOutBtn").addEventListener("click", signOut);
+
+    var welcomeSignInBtn = document.getElementById("welcomeSignInButton");
+    if (welcomeSignInBtn) welcomeSignInBtn.addEventListener("click", signIn);
   }
 
   // ---------------------------------------------------------------------
@@ -755,6 +873,8 @@
     setupFloorTabs();
     setupModalHandlers();
     setupAuth();
+    var scheduleDateEl = document.getElementById("scheduleDate");
+    if (scheduleDateEl) scheduleDateEl.min = todayStr();
     renderFloor(currentFloor);
     setInterval(tick, REFRESH_INTERVAL_MS);
 

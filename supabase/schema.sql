@@ -79,3 +79,23 @@ create policy "Users can update their own reservations"
 create policy "Users can delete their own reservations"
   on reservations for delete
   using (email = auth.jwt() ->> 'email');
+
+-- ---------------------------------------------------------------------
+-- Guard: reject reservations whose derived start time is already in the
+-- past — enforced by Postgres itself so it holds even if a client bypasses
+-- the app's own UI (which hides/rejects past dates and hours). Evaluated
+-- against starts_at, which the reservations_set_range_trigger above always
+-- derives from reservation_date/start_hour before this CHECK runs (BEFORE
+-- ROW triggers modify NEW before constraints are checked), so a client
+-- can't send a stale/mismatched starts_at to dodge this. A small 5-minute
+-- grace window avoids rejecting a booking made for "right now" that takes
+-- a moment to submit. Safe to re-run: only adds the constraint if it
+-- doesn't already exist.
+-- ---------------------------------------------------------------------
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'starts_not_in_past') then
+    alter table reservations
+      add constraint starts_not_in_past check (starts_at >= now() - interval '5 minutes');
+  end if;
+end $$;
