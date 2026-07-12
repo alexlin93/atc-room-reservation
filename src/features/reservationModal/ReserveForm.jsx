@@ -3,8 +3,16 @@
 // selects, a read-only "Reserving as" line, and the submit/cancel-edit
 // actions. All form logic (validation, conflict pre-checks, submit)
 // lives in the parent RoomModal — this component is purely presentational.
+//
+// `editingOriginal` is non-null only when an admin has this open in edit
+// mode for someone ELSE's reservation (RoomModal computes that — see its
+// isEditingSomeoneElse). The "Reserving as" line swaps to an explicit
+// "Editing X's reservation ... — Admin" cue in that case, so the fact that
+// the original owner's identity is being preserved (not transferred to the
+// signed-in admin) on save is visible, not a silent decision.
 export default function ReserveForm({
   user,
+  editingOriginal,
   startHour,
   onStartHourChange,
   startOptions,
@@ -24,7 +32,21 @@ export default function ReserveForm({
         <h3>Reserve this room</h3>
         <div className="form-row reserving-as-row">
           <span id="reservingAsText">
-            {user ? `Reserving as: ${user.name ? user.name + " " : ""}(${user.email})` : ""}
+            {editingOriginal ? (
+              <>
+                Editing {editingOriginal.name}&rsquo;s reservation ({editingOriginal.email}){" "}
+                <span
+                  className="admin-badge admin-editing-badge"
+                  title="You're an admin editing another user's reservation — it stays theirs on save"
+                >
+                  Admin
+                </span>
+              </>
+            ) : user ? (
+              `Reserving as: ${user.name ? user.name + " " : ""}(${user.email})`
+            ) : (
+              ""
+            )}
           </span>
         </div>
         <div className="form-row">

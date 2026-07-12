@@ -99,6 +99,26 @@ export default function RoomModal({
       });
   }, [reservations, floor, roomId]);
 
+  // The reservation currently being edited (looked up live from
+  // `reservations`, not just the `editReservation` prop this modal mounted
+  // with — enterEditMode() below can switch editingId to a *different*
+  // reservation without remounting, e.g. an admin editing several rooms'
+  // bookings from this same modal instance). Null while creating a new
+  // reservation (editingId === null) or if the row was deleted out from
+  // under us mid-edit.
+  const editingOriginal = useMemo(
+    () => (editingId ? reservations.find((r) => r.id === editingId) || null : null),
+    [editingId, reservations]
+  );
+
+  // True only when an admin has opened someone ELSE's existing reservation
+  // in edit mode — never true for a self-edit or for a brand-new
+  // reservation, so those two paths keep stamping the signed-in user's own
+  // identity exactly as before. Gates both the submit payload (below, so an
+  // edit doesn't silently reassign the reservation to the admin who touched
+  // it) and the "Editing X's reservation" UI cue in ReserveForm.
+  const isEditingSomeoneElse = !!(user && editingOriginal && editingOriginal.email !== user.email);
+
   function enterEditMode(r) {
     setEditingId(r.id);
     setDate(r.date);
@@ -236,14 +256,24 @@ export default function RoomModal({
       return;
     }
 
+    // Creating a new reservation, or editing your own, stamps the
+    // signed-in user's identity (unchanged behavior). Editing SOMEONE
+    // ELSE's existing reservation (only reachable at all when isAdmin,
+    // since that's the only case UpcomingList/the admin dashboard render
+    // Edit for a non-owned row) preserves the ORIGINAL owner's email/name
+    // instead — the RLS "own reservation" policies (and My Reservations'
+    // own `r.email === user.email` filter) key off this column, so
+    // overwriting it here would silently strip the original owner's
+    // ability to see or cancel their own booking after an admin merely
+    // fixed a typo'd time for them.
     const payload = {
       floor,
       room_id: roomId,
       reservation_date: chosenDate,
       start_hour: chosenStart,
       duration_hours: chosenDuration,
-      email: user.email,
-      name: user.name,
+      email: isEditingSomeoneElse ? editingOriginal.email : user.email,
+      name: isEditingSomeoneElse ? editingOriginal.name : user.name,
     };
 
     const wasEditing = editingId;
@@ -321,6 +351,7 @@ export default function RoomModal({
 
       <ReserveForm
         user={user}
+        editingOriginal={isEditingSomeoneElse ? editingOriginal : null}
         startHour={startHour}
         onStartHourChange={setStartHour}
         startOptions={startOptions}

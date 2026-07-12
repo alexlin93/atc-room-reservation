@@ -205,6 +205,17 @@ body {
   padding: 0.15rem 0.55rem;
 }
 
+/* Reuses .admin-badge's pill styling verbatim inside the reserve form's
+   "Reserving as" row (ReserveForm.jsx) when an admin has a DIFFERENT
+   user's reservation open in edit mode — just a small top nudge so the
+   pill's cap-height lines up with the surrounding text baseline instead of
+   the header's flex-centered alignment. */
+.admin-editing-badge {
+  vertical-align: middle;
+  position: relative;
+  top: -1px;
+}
+
 /* ---------- Gating (signed-out vs signed-in) ---------- */
 /* Default assumes signed-out (the safe starting state) until app.js's
    auth check confirms a real session, then flips these via inline
