@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Elgin Campus Room Reservations</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <h1>Elgin Campus &mdash; Building A</h1>
+    <div class="floor-tabs" id="floorTabs">
+      <button class="floor-tab active" data-floor="3">Floor 3</button>
+      <button class="floor-tab" data-floor="4">Floor 4</button>
+    </div>
+    <div class="legend">
+      <span class="legend-item"><span class="swatch free"></span> Free</span>
+      <span class="legend-item"><span class="swatch occupied"></span> Reserved now</span>
+      <span class="legend-item"><span class="swatch na"></span> Not reservable</span>
+    </div>
+  </header>
+
+  <main>
+    <div class="floor-title" id="floorTitle"></div>
+    <div class="map-wrap">
+      <div class="map-canvas" id="mapCanvas"></div>
+    </div>
+  </main>
+
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <button class="modal-close" id="modalClose" aria-label="Close">&times;</button>
+      <h2 id="modalTitle">Room</h2>
+      <div class="modal-status" id="modalStatus"></div>
+
+      <div class="schedule-controls">
+        <label>Date
+          <input type="date" id="scheduleDate" />
+        </label>
+      </div>
+
+      <div class="day-grid" id="dayGrid"></div>
+
+      <form class="reserve-form" id="reserveForm">
+        <h3>Reserve this room</h3>
+        <div class="form-row">
+          <label>Your name
+            <input type="text" id="reserveName" required maxlength="60" placeholder="e.g. Alex Lin" />
+          </label>
+        </div>
+        <div class="form-row">
+          <label>Start time
+            <select id="reserveStart"></select>
+          </label>
+          <label>Duration
+            <select id="reserveDuration">
+              <option value="1">1 hour</option>
+              <option value="2">2 hours</option>
+              <option value="3">3 hours</option>
+              <option value="4">4 hours</option>
+            </select>
+          </label>
+        </div>
+        <div class="form-error" id="formError"></div>
+        <button type="submit" class="btn-reserve">Reserve room</button>
+      </form>
+
+      <div class="upcoming">
+        <h3>Upcoming reservations</h3>
+        <ul id="upcomingList" class="upcoming-list"></ul>
+      </div>
+    </div>
+  </div>
+
+  <script src="rooms-data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

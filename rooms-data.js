@@ -1,0 +1,188 @@
+// Room/floor layout data, approximated from the Elgin Campus Building A
+// Floor 3 and Floor 4 map images. Coordinates are in arbitrary "map units"
+// (not pixels) laid out over each floor's canvasWidth x canvasHeight and
+// rendered as percentages, so exact values only need to be roughly
+// proportional to the source maps.
+//
+// Only spaces that carry a specific name/number on the map are reservable.
+// Generic infrastructure (garages, stairs, elevators, restrooms, the
+// "Kids Desk" service counter) and section labels (Harvest Christian
+// Academy, Staff Suite, Lakeside) are not reservable.
+
+const FLOORS = {
+  3: {
+    label: "Floor 3",
+    title: "Elgin Campus | Building A | Floor 3",
+    canvasWidth: 1700,
+    canvasHeight: 1300,
+    labels: [
+      { text: "Harvest Christian Academy", x: 560, y: 172, w: 430, h: 30 },
+      { text: "Staff Suite", x: 1515, y: 430, w: 40, h: 560, vertical: true },
+    ],
+    zones: [
+      { label: "Exit Stairs", x: 170, y: 215, w: 120, h: 95 },
+      { label: "Exit Stairs", x: 745, y: 215, w: 100, h: 95 },
+      { label: "Exit Stairs", x: 1300, y: 215, w: 110, h: 95 },
+      { label: "West Parking Garage", x: 260, y: 430, w: 485, h: 560 },
+      { label: "East Parking Garage", x: 945, y: 430, w: 400, h: 560 },
+      { label: "Central Stairs / Elevator / Restrooms", x: 745, y: 430, w: 200, h: 560 },
+      { label: "Kids Desk", x: 745, y: 990, w: 155, h: 100 },
+      { label: "Restroom", x: 1400, y: 990, w: 90, h: 45 },
+      { label: "Exit Stairs", x: 170, y: 1090, w: 120, h: 160 },
+      { label: "Exit Stairs", x: 745, y: 1090, w: 115, h: 160 },
+      { label: "Exit Stairs", x: 1300, y: 1090, w: 110, h: 160 },
+    ],
+    rooms: [
+      // Top office row
+      { id: "N334", x: 300, y: 215, w: 90, h: 105 },
+      { id: "N332", x: 390, y: 215, w: 90, h: 105 },
+      { id: "N330", x: 480, y: 215, w: 90, h: 105 },
+      { id: "N328", x: 570, y: 215, w: 90, h: 105 },
+      { id: "N326", x: 660, y: 215, w: 85, h: 105 },
+      { id: "N312", x: 860, y: 215, w: 80, h: 105 },
+      { id: "N310", x: 940, y: 215, w: 80, h: 105 },
+      { id: "N308", x: 1020, y: 215, w: 90, h: 105 },
+      { id: "N306", x: 1110, y: 215, w: 90, h: 105 },
+      { id: "N304", x: 1200, y: 215, w: 90, h: 105 },
+      // Second row
+      { id: "N335", x: 170, y: 320, w: 120, h: 75 },
+      { id: "N329", x: 300, y: 320, w: 445, h: 110 },
+      { id: "N315", x: 745, y: 320, w: 100, h: 110 },
+      { id: "N309", x: 860, y: 320, w: 200, h: 110 },
+      { id: "N307", x: 1060, y: 320, w: 200, h: 110 },
+      { id: "N303", x: 1260, y: 360, w: 40, h: 70 },
+      { id: "N301", x: 1310, y: 400, w: 50, h: 60 },
+      // Third row (left column only)
+      { id: "N337", x: 170, y: 395, w: 120, h: 65 },
+      // Staff Suite / east column
+      { id: "E302", x: 1410, y: 430, w: 90, h: 40 },
+      { id: "E304", x: 1410, y: 470, w: 90, h: 40 },
+      { id: "E306", x: 1410, y: 510, w: 90, h: 35 },
+      { id: "E308", x: 1410, y: 545, w: 90, h: 35 },
+      { id: "E310", x: 1410, y: 580, w: 90, h: 35 },
+      { id: "AA225", x: 1345, y: 585, w: 60, h: 45 },
+      { id: "Conference Room", x: 1440, y: 430, w: 90, h: 190 },
+      { id: "E316", x: 1410, y: 800, w: 90, h: 35 },
+      { id: "E318", x: 1410, y: 835, w: 90, h: 35 },
+      { id: "E320", x: 1410, y: 870, w: 90, h: 35 },
+      { id: "E322", x: 1410, y: 905, w: 90, h: 35 },
+      { id: "E324", x: 1410, y: 940, w: 90, h: 35 },
+      // Bottom office row
+      { id: "S377", x: 900, y: 990, w: 40, h: 90 },
+      { id: "S375", x: 940, y: 990, w: 40, h: 90 },
+      { id: "S373", x: 980, y: 990, w: 35, h: 90 },
+      { id: "S371", x: 1015, y: 990, w: 30, h: 90 },
+      { id: "S369", x: 1045, y: 990, w: 35, h: 90 },
+      { id: "S367", x: 1080, y: 990, w: 35, h: 90 },
+      { id: "S365", x: 1115, y: 990, w: 35, h: 90 },
+      { id: "S363", x: 1150, y: 990, w: 35, h: 90 },
+      { id: "S361", x: 1185, y: 990, w: 35, h: 90 },
+      { id: "S359", x: 1220, y: 990, w: 40, h: 90 },
+      { id: "S357", x: 1260, y: 990, w: 50, h: 45 },
+      { id: "S356", x: 1260, y: 1035, w: 50, h: 45 },
+      { id: "S352", x: 1310, y: 990, w: 90, h: 90 },
+      // Bottom-most row
+      { id: "Kid's Auditorium", x: 290, y: 1090, w: 330, h: 160 },
+      { id: "Playground", x: 620, y: 1090, w: 125, h: 160 },
+      { id: "MPR", x: 860, y: 1090, w: 190, h: 160 },
+      { id: "313", x: 1130, y: 1090, w: 80, h: 160 },
+      { id: "312", x: 1210, y: 1090, w: 80, h: 160 },
+    ],
+  },
+
+  4: {
+    label: "Floor 4",
+    title: "Elgin Campus | Building A | Floor 4",
+    canvasWidth: 1700,
+    canvasHeight: 1350,
+    labels: [
+      { text: "Harvest Christian Academy", x: 560, y: 172, w: 430, h: 30 },
+      { text: "Staff Suite", x: 1515, y: 430, w: 40, h: 530, vertical: true },
+      { text: "Lakeside", x: 700, y: 1265, w: 300, h: 30 },
+    ],
+    zones: [
+      { label: "Exit Stairs", x: 170, y: 215, w: 120, h: 95 },
+      { label: "Exit Stairs", x: 745, y: 215, w: 100, h: 95 },
+      { label: "Exit Stairs", x: 1300, y: 215, w: 110, h: 95 },
+      { label: "West Parking Garage", x: 260, y: 460, w: 485, h: 530 },
+      { label: "East Parking Garage", x: 945, y: 460, w: 400, h: 530 },
+      { label: "Central Stairs / Elevator / Restrooms", x: 745, y: 460, w: 200, h: 530 },
+      { label: "Restroom", x: 1300, y: 370, w: 110, h: 30 },
+      { label: "Restroom", x: 1130, y: 990, w: 80, h: 35 },
+      { label: "Exit Stairs", x: 170, y: 1130, w: 90, h: 90 },
+      { label: "Exit Stairs", x: 745, y: 1130, w: 90, h: 90 },
+      { label: "Exit Stairs", x: 1300, y: 1130, w: 90, h: 90 },
+    ],
+    rooms: [
+      // Top office row
+      { id: "N434", x: 300, y: 215, w: 90, h: 105 },
+      { id: "N432", x: 390, y: 215, w: 90, h: 105 },
+      { id: "N430", x: 480, y: 215, w: 90, h: 105 },
+      { id: "N428", x: 570, y: 215, w: 90, h: 105 },
+      { id: "N426", x: 660, y: 215, w: 85, h: 105 },
+      { id: "N412", x: 860, y: 215, w: 80, h: 105 },
+      { id: "N410", x: 940, y: 215, w: 80, h: 105 },
+      { id: "N408", x: 1020, y: 215, w: 90, h: 105 },
+      { id: "N406", x: 1110, y: 215, w: 90, h: 105 },
+      { id: "N404", x: 1200, y: 215, w: 90, h: 105 },
+      // Second row
+      { id: "N437", x: 170, y: 320, w: 120, h: 140 },
+      { id: "N431", x: 300, y: 320, w: 180, h: 110 },
+      { id: "N429", x: 480, y: 320, w: 90, h: 110 },
+      { id: "N427", x: 570, y: 320, w: 175, h: 110 },
+      { id: "N416", x: 745, y: 320, w: 100, h: 110 },
+      { id: "N409", x: 860, y: 320, w: 125, h: 110 },
+      { id: "N407", x: 985, y: 320, w: 100, h: 110 },
+      { id: "N405", x: 1085, y: 320, w: 100, h: 110 },
+      { id: "N403", x: 1185, y: 320, w: 105, h: 110 },
+      { id: "N401", x: 1300, y: 400, w: 50, h: 60 },
+      // Staff Suite / east column
+      { id: "411", x: 1360, y: 430, w: 45, h: 35 },
+      { id: "412", x: 1360, y: 465, w: 45, h: 35 },
+      { id: "E402", x: 1410, y: 430, w: 90, h: 40 },
+      { id: "E404", x: 1410, y: 470, w: 90, h: 40 },
+      { id: "E406", x: 1410, y: 510, w: 90, h: 35 },
+      { id: "E405B", x: 1345, y: 545, w: 60, h: 35 },
+      { id: "E406A", x: 1345, y: 580, w: 60, h: 35 },
+      { id: "E410", x: 1410, y: 615, w: 90, h: 105 },
+      { id: "E412A", x: 1345, y: 800, w: 60, h: 35 },
+      { id: "E412B", x: 1345, y: 835, w: 60, h: 35 },
+      { id: "E414", x: 1410, y: 850, w: 90, h: 35 },
+      { id: "E416", x: 1410, y: 885, w: 90, h: 35 },
+      { id: "E418", x: 1410, y: 920, w: 90, h: 35 },
+      // Bottom office row
+      { id: "S489", x: 170, y: 990, w: 90, h: 70 },
+      { id: "S488", x: 260, y: 990, w: 35, h: 35 },
+      { id: "S487", x: 260, y: 1025, w: 35, h: 35 },
+      { id: "S486", x: 295, y: 990, w: 40, h: 70 },
+      { id: "S485", x: 335, y: 990, w: 40, h: 70 },
+      { id: "S484", x: 375, y: 990, w: 40, h: 70 },
+      { id: "S483", x: 415, y: 990, w: 35, h: 70 },
+      { id: "S482", x: 450, y: 990, w: 35, h: 70 },
+      { id: "S481", x: 485, y: 990, w: 40, h: 70 },
+      { id: "S480", x: 525, y: 990, w: 35, h: 70 },
+      { id: "S479", x: 560, y: 990, w: 35, h: 70 },
+      { id: "S478", x: 595, y: 990, w: 35, h: 70 },
+      { id: "S477", x: 630, y: 990, w: 35, h: 35 },
+      { id: "S476", x: 630, y: 1025, w: 35, h: 35 },
+      { id: "S466", x: 665, y: 990, w: 40, h: 70 },
+      { id: "S465", x: 705, y: 990, w: 40, h: 70 },
+      { id: "S463", x: 745, y: 990, w: 35, h: 70 },
+      { id: "S462", x: 780, y: 990, w: 35, h: 70 },
+      { id: "S461", x: 815, y: 990, w: 35, h: 70 },
+      { id: "S460", x: 850, y: 990, w: 35, h: 70 },
+      { id: "S459", x: 885, y: 990, w: 35, h: 70 },
+      { id: "S458", x: 920, y: 990, w: 35, h: 70 },
+      { id: "S457", x: 955, y: 990, w: 35, h: 70 },
+      { id: "S456", x: 990, y: 990, w: 35, h: 70 },
+      { id: "S455", x: 1025, y: 990, w: 35, h: 70 },
+      { id: "S454", x: 1060, y: 990, w: 35, h: 70 },
+      { id: "S453", x: 1095, y: 990, w: 35, h: 70 },
+      { id: "S451", x: 1130, y: 1025, w: 90, h: 105 },
+    ],
+  },
+};
+
+// Reservable hours of the day (24h clock). 7am - 9pm.
+const OPEN_HOUR = 7;
+const CLOSE_HOUR = 21;
