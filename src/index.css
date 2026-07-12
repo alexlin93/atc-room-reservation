@@ -895,6 +895,76 @@ main {
   margin-top: 1.25rem;
 }
 
+/* ---------- Admin Dashboard page ---------- */
+/* A third overlay reusing the same .modal-overlay/.modal mechanics as the
+   room modal and My Reservations (open/close, backdrop click,
+   Escape-to-close wired in App.jsx) — a single wide table of every
+   reservation from every user, so it's sized closer to the My Reservations
+   modal than the small room-modal popover. */
+
+.admin-dash-modal {
+  max-width: 980px;
+}
+
+.admin-dash-subtitle {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  margin: 0 0 1rem;
+}
+
+.admin-table-wrap {
+  overflow-x: auto;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.admin-table th {
+  color: var(--color-text-muted);
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+.admin-table th:last-child,
+.admin-table td:last-child {
+  text-align: right;
+}
+
+.admin-table-email {
+  color: var(--color-text-muted);
+  font-weight: 400;
+}
+
+.admin-row-actions {
+  display: inline-flex;
+  gap: 0.4rem;
+  justify-content: flex-end;
+}
+
+.admin-table-empty {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  font-style: italic;
+  padding: 0.75rem 0;
+}
+
+.admin-dash-footer {
+  border-top: 1px solid var(--color-border);
+  padding-top: 0.75rem;
+  margin-top: 1.25rem;
+}
+
 /* ---------- Responsive ---------- */
 
 @media (max-width: 640px) {

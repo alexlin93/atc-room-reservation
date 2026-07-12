@@ -3,7 +3,22 @@
 // signed in. Both states stay mounted; visibility is toggled via inline
 // style (matching style.css's expectations) rather than mount/unmount, so
 // there's no layout jump in the sticky header.
-export default function AuthArea({ user, isAdmin, onSignIn, onSignOut, onOpenMyReservations }) {
+//
+// The "Admin Dashboard" link sits next to the admin badge, following the
+// exact same convention as "My Reservations" (a clickable text control that
+// opens a full-page overlay) — it only renders at all when `isAdmin` is
+// true, same as the badge right next to it. That's a UI convenience only:
+// the real enforcement that a non-admin can't act on other users'
+// reservations is the RLS policies at the database layer (already in
+// place), not this conditional render.
+export default function AuthArea({
+  user,
+  isAdmin,
+  onSignIn,
+  onSignOut,
+  onOpenMyReservations,
+  onOpenAdminDashboard,
+}) {
   return (
     <div className="auth-area" id="authArea">
       <button
@@ -36,6 +51,16 @@ export default function AuthArea({ user, isAdmin, onSignIn, onSignOut, onOpenMyR
           <span className="admin-badge" id="adminBadge" title="Admin">
             🛡️ Admin
           </span>
+        )}
+        {isAdmin && (
+          <button
+            type="button"
+            id="adminDashboardLink"
+            className="btn-link"
+            onClick={onOpenAdminDashboard}
+          >
+            Admin Dashboard
+          </button>
         )}
         <button type="button" id="signOutBtn" className="btn-link" onClick={onSignOut}>
           Sign out

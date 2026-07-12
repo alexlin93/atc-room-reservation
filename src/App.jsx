@@ -9,6 +9,7 @@ import { useNow } from "./hooks/useNow";
 import WelcomeScreen from "./pages/WelcomeScreen";
 import MainAppPage from "./pages/MainAppPage";
 import MyReservationsPage from "./pages/MyReservationsPage";
+import AdminDashboardPage from "./pages/AdminDashboardPage";
 
 const REFRESH_INTERVAL_MS = 30000; // recompute "is it occupied right now" as time passes
 
@@ -29,6 +30,7 @@ export default function App() {
   // { floor, roomId, editReservation } | null
   const [modalTarget, setModalTarget] = useState(null);
   const [myResOpen, setMyResOpen] = useState(false);
+  const [adminDashOpen, setAdminDashOpen] = useState(false);
 
   function openModal(targetFloor, roomId, editReservation = null) {
     setModalTarget({ floor: targetFloor, roomId, editReservation });
@@ -45,6 +47,20 @@ export default function App() {
     setMyResOpen(false);
   }
 
+  // UI-convenience gate only (mirrors openMyReservations' `if (!user)`
+  // guard) — the real enforcement that only an admin can act on other
+  // users' reservations is the RLS policies at the database layer, which
+  // already exist and already work. AdminDashboardPage also re-checks
+  // isAdmin itself as defense in depth, in case this state were ever forced
+  // open some other way.
+  function openAdminDashboard() {
+    if (!isAdmin) return;
+    setAdminDashOpen(true);
+  }
+  function closeAdminDashboard() {
+    setAdminDashOpen(false);
+  }
+
   // My Reservations table's Edit button: same path the room modal's own
   // Edit button takes, just entered from a different starting point.
   function handleEditFromMyRes(r) {
@@ -58,27 +74,44 @@ export default function App() {
     openModal(f, roomId);
   }
 
+  // Admin Dashboard's Edit button: identical path to handleEditFromMyRes
+  // above, just entered from the admin dashboard's table instead — reuses
+  // the exact same RoomModal edit flow (and so its conflict-check/
+  // admin-bypass logic) rather than a parallel implementation.
+  function handleEditFromAdminDashboard(r) {
+    closeAdminDashboard();
+    openModal(r.floor, r.roomId, r);
+  }
+
   // Nothing meaningful to show for a signed-out visitor, and the data was
-  // scoped to whoever just signed out.
+  // scoped to whoever just signed out. Also closes the admin dashboard —
+  // whether from signing out entirely, or from an admin's role being
+  // revoked while it happened to be open.
   const userEmail = user ? user.email : null;
   useEffect(() => {
     if (!userEmail) setMyResOpen(false);
   }, [userEmail]);
+  useEffect(() => {
+    if (!isAdmin) setAdminDashOpen(false);
+  }, [isAdmin]);
 
-  // Escape closes whichever overlay is open, My Reservations taking
-  // priority (matches the vanilla app's global keydown handler).
+  // Escape closes whichever overlay is open, in this priority order
+  // (matches the vanilla app's global keydown handler, extended for the
+  // new admin dashboard overlay).
   useEffect(() => {
     function onKeyDown(e) {
       if (e.key !== "Escape") return;
       if (myResOpen) {
         closeMyReservations();
+      } else if (adminDashOpen) {
+        closeAdminDashboard();
       } else if (modalTarget) {
         closeModal();
       }
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [myResOpen, modalTarget]);
+  }, [myResOpen, adminDashOpen, modalTarget]);
 
   const showAppChrome = !!user;
 
@@ -99,6 +132,7 @@ export default function App() {
           onSignIn={signIn}
           onSignOut={signOut}
           onOpenMyReservations={openMyReservations}
+          onOpenAdminDashboard={openAdminDashboard}
         />
       </header>
 
@@ -135,6 +169,17 @@ export default function App() {
           onClose={closeMyReservations}
           onEditReservation={handleEditFromMyRes}
           onOpenRoom={handleOpenRoomFromMyRes}
+          deleteReservationRow={deleteReservationRow}
+          refresh={refresh}
+        />
+      )}
+
+      {adminDashOpen && (
+        <AdminDashboardPage
+          isAdmin={isAdmin}
+          reservations={reservations}
+          onClose={closeAdminDashboard}
+          onEditReservation={handleEditFromAdminDashboard}
           deleteReservationRow={deleteReservationRow}
           refresh={refresh}
         />
