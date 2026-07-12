@@ -14,7 +14,7 @@
 // floor plan) instead of one undifferentiated "Not Reservable" block, so
 // the map reads more like a real floor plan.
 
-const FLOORS = {
+export const FLOORS = {
   3: {
     label: "Floor 3",
     title: "Elgin Campus | Building A | Floor 3",
@@ -108,5 +108,5 @@ const FLOORS = {
 };
 
 // Reservable hours of the day (24h clock). 7am - 9pm.
-const OPEN_HOUR = 7;
-const CLOSE_HOUR = 21;
+export const OPEN_HOUR = 7;
+export const CLOSE_HOUR = 21;
