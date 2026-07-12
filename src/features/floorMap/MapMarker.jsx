@@ -17,6 +17,14 @@ const ICONS = {
   "stairs-up": "⬆️",
   "stairs-down": "⬇️",
   playground: "\u{1F6DD}",
+  // One of the 6 standard fixture-icon types called out on the reference
+  // floor plans' legend (bathrooms, elevator, R.O. water, first-aid,
+  // dumpster, stairs), added here so the type is renderable even though no
+  // `markers` entry currently uses it — no dumpster was visible anywhere on
+  // either floor's plan (it likely lives outside the visible floor area,
+  // e.g. near an exterior loading dock), so no placement was guessed. See
+  // roomsData.js's floor comments for the same note.
+  dumpster: "\u{1F5D1}\u{FE0F}",
 };
 
 export default function MapMarker({ marker, data }) {
