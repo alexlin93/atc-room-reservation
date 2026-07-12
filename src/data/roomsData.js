@@ -122,14 +122,39 @@ export const FLOORS = {
       { label: "", x: 140, y: 1140, w: 1020, h: 300, color: KIDSWING_BLUE, variant: "tint" },
     ],
     markers: [
-      { type: "elevator", x: 930, y: 430 },
-      { type: "elevator", x: 930, y: 1050 },
+      // Corner stairwell notches (mirror the building outline's stepped
+      // corners — see buildOutlinePath() in utils/mapLayout.js).
+      { type: "stairs", x: 45, y: 20 },
+      // Central corridor stairwell, between the two classroom-block halves
+      // of the school zone (two glyphs close together, one stairwell).
+      { type: "stairs", x: 910, y: 430 },
+      { type: "stairs", x: 965, y: 430 },
+      { type: "stairs", x: 1955, y: 20 },
+      // East-wall stack, top to bottom: women's bathroom + elevator near
+      // the SIS Staff Suite zone, first-aid near Staff Suite Conf
+      // Room/Kitchenette (Floor 3 only — not mirrored on Floor 4), R.O.
+      // water beside (not on top of) the Kitchenette label, men's bathroom
+      // near Lakeside Storage. Each is offset toward a corner of its zone
+      // box rather than the box's (label-occupying) center point.
+      { type: "bathroom-women", x: 1790, y: 360 },
+      { type: "elevator", x: 1790, y: 400 },
+      { type: "first-aid", x: 1790, y: 625 },
+      { type: "water", x: 1775, y: 790 },
+      { type: "bathroom-men", x: 1790, y: 1185 },
+      // Central Stairs column base cluster.
       { type: "bathroom-women", x: 830, y: 1050 },
       { type: "bathroom-men", x: 1030, y: 1050 },
-      { type: "water", x: 1875, y: 825 },
-      { type: "first-aid", x: 1830, y: 480 },
-      { type: "stairs-up", x: 1830, y: 680, label: "FL 4" },
-      { type: "playground", x: 865, y: 1360 },
+      { type: "elevator", x: 930, y: 1050 },
+      // Near the Lakeside Play Structure room: first-aid + R.O. water in the
+      // gap between the kids-wing tint band and the telecommuting cluster,
+      // plus a stairs icon in the nook between Kids' Theatre and the play
+      // structure, and the illustrative play-structure icon itself moved to
+      // a corner of its room box instead of dead center on the room label.
+      { type: "first-aid", x: 1130, y: 1330 },
+      { type: "water", x: 1130, y: 1390 },
+      { type: "stairs", x: 625, y: 1360 },
+      { type: "playground", x: 660, y: 1310 },
+      { type: "stairs-up", x: 1955, y: 1440, label: "FL 4" },
     ],
     rooms: [
       // East wall room stack, top to bottom, filling the column formerly
@@ -210,12 +235,37 @@ export const FLOORS = {
       { label: "S469", x: 1215, y: 1235, w: 415, h: 70 },
     ],
     markers: [
-      { type: "stairs", x: 930, y: 430 },
+      // Corner stairwell notches (mirror the building outline's stepped
+      // corners — see buildOutlinePath() in utils/mapLayout.js).
+      { type: "stairs", x: 45, y: 20 },
+      // Central corridor stairwell, between the two classroom-block halves
+      // of the school zone (two glyphs close together, one stairwell).
+      { type: "stairs", x: 910, y: 430 },
+      { type: "stairs", x: 965, y: 430 },
+      { type: "stairs", x: 1955, y: 20 },
+      // East-wall stack, top to bottom: women's bathroom + elevator near
+      // the SIS Staff Suite zone, a small stairs icon in the curved nook of
+      // the building outline near Library/SIS Staff Suite (Floor 4 only —
+      // not mirrored on Floor 3, which has an extra first-aid icon here
+      // instead), R.O. water beside (not on top of) the Kitchenette label,
+      // men's bathroom near the bottom of the stack. Each is offset toward
+      // a corner of its zone box rather than the box's (label-occupying)
+      // center point.
+      { type: "bathroom-women", x: 1790, y: 390 },
+      { type: "elevator", x: 1790, y: 430 },
+      { type: "stairs", x: 1930, y: 700 },
+      { type: "water", x: 1775, y: 835 },
+      { type: "bathroom-men", x: 1790, y: 1140 },
+      // Central Stairs column base cluster.
       { type: "bathroom-women", x: 840, y: 1050 },
       { type: "bathroom-men", x: 930, y: 1050 },
       { type: "elevator", x: 1020, y: 1050 },
-      { type: "water", x: 1875, y: 870 },
-      { type: "stairs-down", x: 1875, y: 1310, label: "FL 3" },
+      // Bottom of the map: a stairs icon at the boundary between Harvest
+      // Chapel Offices and the room row, R.O. water near the bottom-right
+      // corner, and the stairs-down-to-Floor-3 corner marker.
+      { type: "stairs", x: 785, y: 1160 },
+      { type: "water", x: 1900, y: 1400 },
+      { type: "stairs-down", x: 1955, y: 1440, label: "FL 3" },
     ],
     rooms: [
       // East wall room stack, top to bottom, filling the column formerly
