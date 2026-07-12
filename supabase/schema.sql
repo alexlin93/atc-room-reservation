@@ -28,12 +28,12 @@ create table if not exists reservations (
   exclude using gist (
     floor with =,
     room_id with =,
-    tsrange(starts_at, ends_at, '[)') with &&
+    tstzrange(starts_at, ends_at, '[)') with &&
   ),
 
   exclude using gist (
     email with =,
-    tsrange(starts_at, ends_at, '[)') with &&
+    tstzrange(starts_at, ends_at, '[)') with &&
   )
 );
 
