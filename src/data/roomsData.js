@@ -87,13 +87,29 @@
 // as two more reservable rooms) if that reading is preferred instead.
 //
 // `markers` are small non-interactive point icons (restrooms, elevators,
-// water/R.O. water, first-aid, stairs) — see MapMarker.jsx. Unchanged here;
-// a separate pass is auditing marker placement in this same file. A few
-// (e.g. floor 3's "stairs-up" at (1830, 680), floor 4's "water" near
-// (1875, 870)) now render near/over the east-wall room stack instead of a
-// zone label, since those zones were removed above — that's expected (the
-// source images show those icons right next to/inside those real rooms,
-// e.g. AA225 and E410 respectively) and not a bug in either pass.
+// water/R.O. water, first-aid, stairs) — see MapMarker.jsx. A few (e.g.
+// floor 4's "water" near (1775, 835)) render near/over the east-wall room
+// stack instead of a zone label, since those zones were removed above —
+// that's expected (the source images show those icons right next to/inside
+// those real rooms, e.g. E410) and not a bug.
+//
+// LATEST REVISION (product-owner spot-check against the reference images):
+// three fixes on top of the above.
+//   1. Floor 4's 411/412 were wrongly stacked directly above E402 in one
+//      column instead of forming a two-box vertical stack to E402's west —
+//      see the judgment-call comment on Floor 4's `rooms` array for the fix.
+//   2. Five real Floor 4 rooms ("4th Flr Living Room", "Conf Room 1/2/3",
+//      "Podcast") were wrongly deleted by an earlier pass that mistook them
+//      for fabricated placeholders. Restored with new coordinates (their
+//      original ones collide with the real S463-S451 row/east column) — see
+//      the judgment-call comment at the end of Floor 4's `rooms` array.
+//      "Library" (same earlier pass, same column) was correctly superseded
+//      by the real E402-E418 codes and stays removed, per the product
+//      owner — same for Floor 3's "Staff Suite Conf Room" (superseded by
+//      E302-E324).
+//   3. Floor 3 was missing the mid-east-wall-stack "stairs" marker that
+//      Floor 4 has (it had an extra first-aid icon there instead) — added
+//      one next to the AA225 nook, mirroring Floor 4's equivalent icon.
 
 const SCHOOL_GREEN = "#a9baa0";
 const CHAPEL_SALMON = "#c98a6b";
@@ -132,13 +148,19 @@ export const FLOORS = {
       { type: "stairs", x: 1955, y: 20 },
       // East-wall stack, top to bottom: women's bathroom + elevator near
       // the SIS Staff Suite zone, first-aid near Staff Suite Conf
-      // Room/Kitchenette (Floor 3 only — not mirrored on Floor 4), R.O.
-      // water beside (not on top of) the Kitchenette label, men's bathroom
-      // near Lakeside Storage. Each is offset toward a corner of its zone
-      // box rather than the box's (label-occupying) center point.
+      // Room/Kitchenette, a stairwell nook in the AA225 alcove (mid-stack —
+      // added per product-owner review: this floor was previously missing
+      // the mid-stack stairs icon that Floor 4 has at the equivalent spot;
+      // placed in the open sliver to AA225's right, x1890-2000, the same
+      // way Floor 4 fits its mid-stack stairs icon next to its narrower
+      // E406A/E405B nook rooms, so it doesn't sit on top of AA225's label),
+      // R.O. water beside (not on top of) the Kitchenette label, men's
+      // bathroom near Lakeside Storage. Each is offset toward a corner of
+      // its zone box rather than the box's (label-occupying) center point.
       { type: "bathroom-women", x: 1790, y: 360 },
       { type: "elevator", x: 1790, y: 400 },
       { type: "first-aid", x: 1790, y: 625 },
+      { type: "stairs", x: 1930, y: 710 },
       { type: "water", x: 1775, y: 790 },
       { type: "bathroom-men", x: 1790, y: 1185 },
       // Central Stairs column base cluster.
@@ -159,16 +181,20 @@ export const FLOORS = {
     rooms: [
       // East wall room stack, top to bottom, filling the column formerly
       // occupied by the SIS Staff Suite/Kitchenette/Bros Staff Suite/
-      // Lakeside Storage zones (now removed above). A short gap around
-      // y660-690 keeps the "stairs-up" marker at (1830, 680) in open space,
-      // near AA225 (a small triangular/alcove room in the source image)
-      // without sitting on top of it.
-      { id: "E302", x: 1750, y: 370, w: 250, h: 65 },
-      { id: "E304", x: 1750, y: 445, w: 250, h: 65 },
-      { id: "E306", x: 1750, y: 520, w: 250, h: 65 },
-      { id: "E308", x: 1750, y: 595, w: 250, h: 65 },
+      // Lakeside Storage zones (now removed above). Uniform h55 per room
+      // (matching E316-E324 below and Floor 4's equivalent stack) — an
+      // earlier revision had this top group at h65, inconsistent with the
+      // rest of the stack; evened out per product-owner review. AA225 (a
+      // small triangular/alcove room in the source image, narrower than
+      // the rest of the stack) sits in the gap this leaves before E310,
+      // with the mid-stack "stairs" marker (see `markers` above) in the
+      // open sliver to its right.
+      { id: "E302", x: 1750, y: 370, w: 250, h: 55 },
+      { id: "E304", x: 1750, y: 445, w: 250, h: 55 },
+      { id: "E306", x: 1750, y: 520, w: 250, h: 55 },
+      { id: "E308", x: 1750, y: 595, w: 250, h: 55 },
       { id: "AA225", x: 1750, y: 690, w: 140, h: 45 },
-      { id: "E310", x: 1750, y: 745, w: 250, h: 65 },
+      { id: "E310", x: 1750, y: 745, w: 250, h: 55 },
       // Large room, rotated label via the existing vertical-label
       // convention (h > w * 1.3).
       { id: "Conference Room", x: 1750, y: 820, w: 250, h: 340 },
@@ -244,15 +270,16 @@ export const FLOORS = {
       { type: "stairs", x: 965, y: 430 },
       { type: "stairs", x: 1955, y: 20 },
       // East-wall stack, top to bottom: women's bathroom + elevator near
-      // the SIS Staff Suite zone, a small stairs icon in the curved nook of
-      // the building outline near Library/SIS Staff Suite (Floor 4 only —
-      // not mirrored on Floor 3, which has an extra first-aid icon here
-      // instead), R.O. water beside (not on top of) the Kitchenette label,
-      // men's bathroom near the bottom of the stack. Each is offset toward
-      // a corner of its zone box rather than the box's (label-occupying)
-      // center point.
-      { type: "bathroom-women", x: 1790, y: 390 },
-      { type: "elevator", x: 1790, y: 430 },
+      // the 411/412 nook (offset to its top-left corner — see the
+      // judgment-call comment on `rooms` below for why that nook is
+      // narrower than the rest of the column now — so they sit clear of
+      // the centered room-id labels), a small stairs icon in the curved
+      // nook of the building outline mid-stack (Floor 3 has the equivalent
+      // icon too, next to its AA225 nook, plus an extra first-aid icon this
+      // floor doesn't have), R.O. water beside (not on top of) the
+      // Kitchenette label, men's bathroom near the bottom of the stack.
+      { type: "bathroom-women", x: 1765, y: 385 },
+      { type: "elevator", x: 1765, y: 480 },
       { type: "stairs", x: 1930, y: 700 },
       { type: "water", x: 1775, y: 835 },
       { type: "bathroom-men", x: 1790, y: 1140 },
@@ -270,15 +297,31 @@ export const FLOORS = {
     rooms: [
       // East wall room stack, top to bottom, filling the column formerly
       // occupied by the SIS Staff Suite/Kitchenette/Bros Staff Suite zones
-      // (now removed above): 411/412 (top-right corner), E402-E406, the
-      // curved-wall nook rooms E406A/E405B (the building outline itself
-      // curves inward along this stretch — see buildOutlinePath()), then
-      // E410 (the source image's fixture/icon near it lines up with the
-      // "water" marker at (1875, 870), which now sits right on this room —
-      // expected, not a bug) through E418.
-      { id: "411", x: 1750, y: 370, w: 250, h: 55 },
-      { id: "412", x: 1750, y: 435, w: 250, h: 55 },
-      { id: "E402", x: 1750, y: 500, w: 250, h: 55 },
+      // (now removed above): a small NE-corner nook (411/412 stacked west of
+      // E402 — see below) then E402-E406, the curved-wall nook rooms
+      // E406A/E405B (the building outline itself curves inward along this
+      // stretch — see buildOutlinePath()), then E410 (the source image's
+      // fixture/icon near it lines up with the "water" marker at (1775,
+      // 835), which now sits right on this room — expected, not a bug)
+      // through E418.
+      //
+      // JUDGMENT CALL / bug fix: the product owner reviewed the live map
+      // against the reference image and flagged 411/412 as positioned
+      // wrong — they'd been stacked directly above E402 in one unbroken
+      // full-width column (411 then 412 then E402, top to bottom), which
+      // doesn't match the reference image's actual arrangement: 411 and 412
+      // are a two-box vertical stack sitting immediately to E402's west,
+      // not above it. Re-laid-out as an L-shaped nook occupying the same
+      // overall (x1750-2000, y370-555) footprint the old 411/412/E402 trio
+      // used, so nothing below E402 (E404 onward) had to move: 411/412 take
+      // the west half of that footprint (narrower, stacked), E402 takes the
+      // full height of the east half (narrower but taller than the other
+      // E-rooms, hence the vertical label). Not measured off the source
+      // image pixel-for-pixel — flagged here for a follow-up check against
+      // it if the exact proportions matter.
+      { id: "411", x: 1750, y: 370, w: 125, h: 90 },
+      { id: "412", x: 1750, y: 465, w: 125, h: 90 },
+      { id: "E402", x: 1875, y: 370, w: 125, h: 185 },
       { id: "E404", x: 1750, y: 565, w: 250, h: 55 },
       { id: "E406", x: 1750, y: 630, w: 250, h: 55 },
       { id: "E406A", x: 1750, y: 699, w: 250, h: 53 },
@@ -304,6 +347,40 @@ export const FLOORS = {
       { id: "S454", x: 1484, y: 1150, w: 70, h: 76 },
       { id: "S453", x: 1560, y: 1150, w: 70, h: 76 },
       { id: "S451", x: 1636, y: 1150, w: 70, h: 76 },
+
+      // RESTORED per product-owner review: "4th Flr Living Room", "Conf
+      // Room 1/2/3", and "Podcast" were wrongly deleted by an earlier pass
+      // that mistook them for fabricated placeholders — they're real rooms
+      // and must come back. (Compare "Library", removed by that same
+      // earlier pass from this same column: that one really was correctly
+      // superseded by the real E402-E418 codes above, and stays removed —
+      // only these 5 are restored.)
+      //
+      // JUDGMENT CALL: these rooms' original (pre-deletion) coordinates —
+      // recovered from git history at commit 1f86f0d — spatially overlap
+      // both the S463-S451 row above and Podcast's original column (the
+      // east wall, which the real E-series stack rightly occupies now).
+      // The product owner was explicit that neither the S-row nor these 5
+      // restored rooms should be deleted to resolve that conflict, so both
+      // needed new positions that coexist without overlapping anything.
+      // The band placement below the S-suite row (y1310-1490, spanning the
+      // same overall x-range as the row above) was a judgment call; the
+      // product owner has since confirmed the exact left-to-right order
+      // against the reference image (Conf Room 3, then 4th Flr Living
+      // Room, then Conf Room 2, then Conf Room 1 — Conf Room 3 immediately
+      // west of the Living Room, not east of it) and the widths below
+      // (kept as recovered from git history: Conf Room 3 noticeably wider
+      // than Conf Room 2, which is close to Conf Room 1's width, Living
+      // Room the widest of the four) match the reference proportions.
+      // Podcast (originally in the east column, at a y-level E416/E418 now
+      // occupy) moves to the open strip directly below E418 in that same
+      // column, the only spot left there once the real E-series claimed
+      // the top of the column.
+      { id: "Conf Room 3", x: 800, y: 1310, w: 200, h: 180 },
+      { id: "4th Flr Living Room", x: 1010, y: 1310, w: 430, h: 180 },
+      { id: "Conf Room 2", x: 1450, y: 1310, w: 130, h: 180 },
+      { id: "Conf Room 1", x: 1590, y: 1310, w: 110, h: 180 },
+      { id: "Podcast", x: 1750, y: 1220, w: 250, h: 100 },
     ],
   },
 };
