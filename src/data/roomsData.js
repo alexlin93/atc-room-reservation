@@ -181,16 +181,20 @@ export const FLOORS = {
     rooms: [
       // East wall room stack, top to bottom, filling the column formerly
       // occupied by the SIS Staff Suite/Kitchenette/Bros Staff Suite/
-      // Lakeside Storage zones (now removed above). A short gap around
-      // y660-690 keeps the "stairs-up" marker at (1830, 680) in open space,
-      // near AA225 (a small triangular/alcove room in the source image)
-      // without sitting on top of it.
-      { id: "E302", x: 1750, y: 370, w: 250, h: 65 },
-      { id: "E304", x: 1750, y: 445, w: 250, h: 65 },
-      { id: "E306", x: 1750, y: 520, w: 250, h: 65 },
-      { id: "E308", x: 1750, y: 595, w: 250, h: 65 },
+      // Lakeside Storage zones (now removed above). Uniform h55 per room
+      // (matching E316-E324 below and Floor 4's equivalent stack) — an
+      // earlier revision had this top group at h65, inconsistent with the
+      // rest of the stack; evened out per product-owner review. AA225 (a
+      // small triangular/alcove room in the source image, narrower than
+      // the rest of the stack) sits in the gap this leaves before E310,
+      // with the mid-stack "stairs" marker (see `markers` above) in the
+      // open sliver to its right.
+      { id: "E302", x: 1750, y: 370, w: 250, h: 55 },
+      { id: "E304", x: 1750, y: 445, w: 250, h: 55 },
+      { id: "E306", x: 1750, y: 520, w: 250, h: 55 },
+      { id: "E308", x: 1750, y: 595, w: 250, h: 55 },
       { id: "AA225", x: 1750, y: 690, w: 140, h: 45 },
-      { id: "E310", x: 1750, y: 745, w: 250, h: 65 },
+      { id: "E310", x: 1750, y: 745, w: 250, h: 55 },
       // Large room, rotated label via the existing vertical-label
       // convention (h > w * 1.3).
       { id: "Conference Room", x: 1750, y: 820, w: 250, h: 340 },
@@ -359,19 +363,21 @@ export const FLOORS = {
       // The product owner was explicit that neither the S-row nor these 5
       // restored rooms should be deleted to resolve that conflict, so both
       // needed new positions that coexist without overlapping anything.
-      // Lacking the source image to confirm placement precisely, the most
-      // plausible reading used here: the S463-S451 row and the S468/S469
-      // labels above are one band (y1150-1305), and the 4 conference-style
-      // rooms are a second band directly below them (y1310-1490), spanning
-      // the same overall x-range (~800-1700) as the row above — i.e. the
-      // named rooms sit in a row *underneath* the S-suite row rather than
-      // on top of/instead of it. Podcast (originally in the east column, at
-      // a y-level E416/E418 now occupy) moves to the open strip directly
-      // below E418 in that same column, the only spot left there once the
-      // real E-series claimed the top of the column. Flagged for a
-      // follow-up check against the actual reference image.
-      { id: "4th Flr Living Room", x: 800, y: 1310, w: 430, h: 180 },
-      { id: "Conf Room 3", x: 1240, y: 1310, w: 200, h: 180 },
+      // The band placement below the S-suite row (y1310-1490, spanning the
+      // same overall x-range as the row above) was a judgment call; the
+      // product owner has since confirmed the exact left-to-right order
+      // against the reference image (Conf Room 3, then 4th Flr Living
+      // Room, then Conf Room 2, then Conf Room 1 — Conf Room 3 immediately
+      // west of the Living Room, not east of it) and the widths below
+      // (kept as recovered from git history: Conf Room 3 noticeably wider
+      // than Conf Room 2, which is close to Conf Room 1's width, Living
+      // Room the widest of the four) match the reference proportions.
+      // Podcast (originally in the east column, at a y-level E416/E418 now
+      // occupy) moves to the open strip directly below E418 in that same
+      // column, the only spot left there once the real E-series claimed
+      // the top of the column.
+      { id: "Conf Room 3", x: 800, y: 1310, w: 200, h: 180 },
+      { id: "4th Flr Living Room", x: 1010, y: 1310, w: 430, h: 180 },
       { id: "Conf Room 2", x: 1450, y: 1310, w: 130, h: 180 },
       { id: "Conf Room 1", x: 1590, y: 1310, w: 110, h: 180 },
       { id: "Podcast", x: 1750, y: 1220, w: 250, h: 100 },
