@@ -240,17 +240,31 @@ export default function RoomModal({
       return;
     }
 
+    // Must be checked against the reservation's actual (post-save) owner,
+    // not always the signed-in user — otherwise, when an admin is editing
+    // SOMEONE ELSE's reservation, this would incorrectly check the ADMIN's
+    // own schedule for a conflict instead of the original owner's. That
+    // false positive could block a legitimate edit (the admin happens to
+    // have an unrelated booking that overlaps) with a confusing error
+    // naming a room the target owner has never heard of, and — the other
+    // direction — could miss a real conflict against the owner's other
+    // bookings (falling through to the server's EXCLUDE constraint instead,
+    // which still catches it, just without this nicer client-side message).
+    // Mirrors the same isEditingSomeoneElse branch used for the submit
+    // payload below.
+    const crossConflictEmail = isEditingSomeoneElse ? editingOriginal.email : user.email;
     const crossConflict = hasCrossRoomConflict(
       reservations,
-      user.email,
+      crossConflictEmail,
       chosenDate,
       chosenStart,
       chosenDuration,
       editingId
     );
     if (crossConflict) {
+      const whose = isEditingSomeoneElse ? `${editingOriginal.name} already has` : "You already have";
       setFormError(
-        `You already have ${crossConflict.roomId} booked ` +
+        `${whose} ${crossConflict.roomId} booked ` +
           `${timeRangeLabel(crossConflict.startHour, crossConflict.durationHours)} that day, which overlaps this request.`
       );
       return;
